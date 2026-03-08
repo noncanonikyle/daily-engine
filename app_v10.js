@@ -1098,10 +1098,12 @@
                         <button class="sched-btn sched-reschedule" title="Pick a new date">Reschedule</button>
                     </div>`;
 
-                item.querySelector('.sched-do-today').addEventListener('click', () => {
-                    doTaskToday(task.id, dueDate);
-                    showToast('✅ Added to today\'s to-dos');
-                    renderToday();
+                item.querySelector('.sched-do-today').addEventListener('click', async () => {
+                    if (await showConfirm(`Add "${task.text}" to today's to-dos?`, 'Do Today')) {
+                        doTaskToday(task.id, dueDate);
+                        showToast('✅ Added to today\'s to-dos');
+                        renderToday();
+                    }
                 });
                 item.querySelector('.sched-skip').addEventListener('click', async () => {
                     if (await showConfirm(`Skip "${task.text}" (was due ${dueDateLabel})?`, 'Skip')) {
@@ -1156,10 +1158,12 @@
                     ${actionsHtml}`;
 
                 if (showDoToday) {
-                    item.querySelector('.sched-do-today').addEventListener('click', () => {
-                        doTaskToday(task.id, dueDate);
-                        showToast('✅ Added to today\'s to-dos');
-                        renderToday();
+                    item.querySelector('.sched-do-today').addEventListener('click', async () => {
+                        if (await showConfirm(`Add "${task.text}" to today's to-dos?`, 'Do Today')) {
+                            doTaskToday(task.id, dueDate);
+                            showToast('✅ Added to today\'s to-dos');
+                            renderToday();
+                        }
                     });
                 }
                 item.querySelector('.sched-skip').addEventListener('click', async () => {
