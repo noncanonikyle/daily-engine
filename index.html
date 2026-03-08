@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Daily Engine">
+    <meta name="theme-color" content="#0a0a0f">
+    <title>Daily Engine</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.svg">
+    <link rel="icon" type="image/svg+xml" href="icons/icon-192.svg">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- ===== TOP NAV BAR ===== -->
+    <header id="app-header">
+        <div class="header-left">
+            <span class="app-logo">⚡</span>
+            <h1>Daily Engine</h1>
+        </div>
+        <div class="header-right">
+            <button id="btn-today" class="nav-btn active" aria-label="Today view">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </button>
+            <button id="btn-edit" class="nav-btn" aria-label="Edit schedule">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button id="btn-stats" class="nav-btn" aria-label="Progress stats">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <main id="app-main">
+
+        <!-- TODAY VIEW -->
+        <section id="view-today" class="view active">
+            <div class="today-header">
+                <h2 id="today-date"></h2>
+                <div id="time-block-pills" class="pill-row"></div>
+            </div>
+            <div id="today-checklist" class="checklist-container"></div>
+            <div id="today-progress" class="progress-bar-container">
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <span id="progress-label" class="progress-label">0 / 0</span>
+            </div>
+        </section>
+
+        <!-- EDIT SCHEDULE VIEW -->
+        <section id="view-edit" class="view">
+            <div class="edit-header">
+                <h2>Edit Schedule</h2>
+                <p class="edit-subtitle">Customize tasks for each day &amp; time block</p>
+            </div>
+            <div class="edit-selectors">
+                <div class="selector-group">
+                    <label>Day</label>
+                    <div id="edit-day-pills" class="pill-row"></div>
+                </div>
+                <div class="selector-group">
+                    <label>Time Block</label>
+                    <div id="edit-block-pills" class="pill-row"></div>
+                </div>
+            </div>
+            <div id="edit-task-list" class="edit-task-list"></div>
+            <button id="btn-add-task" class="btn-add-task">+ Add Task</button>
+            <div class="edit-time-settings">
+                <h3>⏰ Time Block Settings</h3>
+                <div class="time-setting-row">
+                    <label>🌅 Morning</label>
+                    <input type="time" id="time-morning-start" class="time-input">
+                    <span>to</span>
+                    <input type="time" id="time-morning-end" class="time-input">
+                </div>
+                <div class="time-setting-row">
+                    <label>💼 Workday</label>
+                    <input type="time" id="time-workday-start" class="time-input">
+                    <span>to</span>
+                    <input type="time" id="time-workday-end" class="time-input">
+                </div>
+                <div class="time-setting-row">
+                    <label>🌙 Evening</label>
+                    <input type="time" id="time-evening-start" class="time-input">
+                    <span>to</span>
+                    <input type="time" id="time-evening-end" class="time-input">
+                </div>
+                <div class="time-setting-row weekend-row">
+                    <label>🏖️ Weekend Free Block</label>
+                    <input type="time" id="time-free-start" class="time-input">
+                    <span>to</span>
+                    <input type="time" id="time-free-end" class="time-input">
+                </div>
+            </div>
+        </section>
+
+        <!-- STATS VIEW -->
+        <section id="view-stats" class="view">
+            <div class="stats-header">
+                <h2>Progress</h2>
+            </div>
+            <div id="stats-content" class="stats-content"></div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
