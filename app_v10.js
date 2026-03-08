@@ -83,6 +83,7 @@
     let selectedBlock = null;
     let editSection = 'blocks'; // 'blocks' | 'tasks'
     let taskFilterBlock = null;
+    let viewingDate = null; // null = today, or 'YYYY-MM-DD' for other days
 
     function loadState() {
         const restored = restoreFromUrl();
@@ -807,26 +808,58 @@
         if (name === 'stats') renderStats();
     }
 
-    btnToday.addEventListener('click', () => switchView('today'));
+    btnToday.addEventListener('click', () => { viewingDate = null; selectedBlock = null; switchView('today'); });
     btnEdit.addEventListener('click', () => switchView('edit'));
     btnStats.addEventListener('click', () => switchView('stats'));
 
     // ══════════════════════════════════════════════════════════
     // ── TODAY VIEW ────────────────────────────────────────────
     // ══════════════════════════════════════════════════════════
+
+    function shiftViewingDate(offset) {
+        const current = viewingDate || todayStr();
+        const d = new Date(current + 'T12:00:00');
+        d.setDate(d.getDate() + offset);
+        viewingDate = dateStr(d);
+        selectedBlock = null; // reset block selection for new day
+        renderToday();
+    }
+
     function renderToday() {
-        const dateStr = todayStr();
-        const dayName = todayDayName();
+        const isToday = !viewingDate || viewingDate === todayStr();
+        const activeDate = viewingDate || todayStr();
+        const dayName = dayNameFromStr(activeDate);
         const dayBlocks = getBlocksForDay(dayName);
-        const currentBlk = getCurrentBlock();
+        const currentBlk = isToday ? getCurrentBlock() : null;
 
         if (!selectedBlock || !dayBlocks.find(b => b.id === selectedBlock)) {
             selectedBlock = currentBlk ? currentBlk.id : (dayBlocks[0] ? dayBlocks[0].id : null);
         }
 
-        // Date header
+        // Date header with navigation
         const dateEl = document.getElementById('today-date');
-        dateEl.textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        const displayDate = new Date(activeDate + 'T12:00:00');
+        dateEl.textContent = displayDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+        // Day navigation row
+        let dayNav = document.getElementById('day-nav-row');
+        if (!dayNav) {
+            dayNav = document.createElement('div');
+            dayNav.id = 'day-nav-row';
+            dayNav.className = 'day-nav-row';
+            dateEl.parentNode.insertBefore(dayNav, dateEl);
+        }
+        dayNav.innerHTML = `
+            <button class="day-nav-btn" id="day-nav-prev" aria-label="Previous day">‹</button>
+            <button class="day-nav-today-pill${isToday ? ' active' : ''}" id="day-nav-today">Today</button>
+            <button class="day-nav-btn" id="day-nav-next" aria-label="Next day">›</button>`;
+        dayNav.querySelector('#day-nav-prev').addEventListener('click', () => shiftViewingDate(-1));
+        dayNav.querySelector('#day-nav-next').addEventListener('click', () => shiftViewingDate(1));
+        dayNav.querySelector('#day-nav-today').addEventListener('click', () => {
+            viewingDate = null;
+            selectedBlock = null;
+            renderToday();
+        });
 
         // Streak badge
         const streaks = computeStreaks();
@@ -837,20 +870,24 @@
             streakEl.className = 'streak-badge';
             dateEl.parentNode.insertBefore(streakEl, dateEl.nextSibling);
         }
-        if (streaks.current > 0) {
-            streakEl.innerHTML = `<span class="streak-fire">🔥</span> <span class="streak-count">${streaks.current}-day streak</span>` +
-                (streaks.best > streaks.current ? ` <span class="streak-best">· Best: ${streaks.best}</span>` : ` <span class="streak-best">· Personal best!</span>`);
+        if (isToday) {
+            if (streaks.current > 0) {
+                streakEl.innerHTML = `<span class="streak-fire">🔥</span> <span class="streak-count">${streaks.current}-day streak</span>` +
+                    (streaks.best > streaks.current ? ` <span class="streak-best">· Best: ${streaks.best}</span>` : ` <span class="streak-best">· Personal best!</span>`);
+            } else {
+                streakEl.innerHTML = `<span class="streak-dimmed">Start a streak today!</span>`;
+            }
+            streakEl.classList.remove('hidden');
         } else {
-            streakEl.innerHTML = `<span class="streak-dimmed">Start a streak today!</span>`;
+            streakEl.classList.add('hidden');
         }
-        streakEl.classList.remove('hidden');
 
         // Time block pills
         const pillRow = document.getElementById('time-block-pills');
         pillRow.innerHTML = '';
         for (const block of dayBlocks) {
             const pill = document.createElement('button');
-            pill.className = 'pill' + (block.id === selectedBlock ? ' active' : '') + (currentBlk && block.id === currentBlk.id ? ' current-indicator' : '');
+            pill.className = 'pill' + (block.id === selectedBlock ? ' active' : '') + (isToday && currentBlk && block.id === currentBlk.id ? ' current-indicator' : '');
             pill.dataset.blockId = block.id;
             pill.style.setProperty('--pill-color', getBlockColor(block));
             pill.textContent = block.name;
@@ -863,17 +900,17 @@
         container.innerHTML = '';
         const block = getBlockById(selectedBlock);
         const tasks = block ? getTasksForDayAndBlock(dayName, block.id) : [];
-        const visibleTasks = tasks.filter(t => isTaskDueOnDate(t, dateStr));
+        const visibleTasks = tasks.filter(t => isTaskDueOnDate(t, activeDate));
 
         if (!visibleTasks.length) {
             container.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-icon">📝</div>
-                    <p>No tasks for this block today.<br>Head to Edit to add some!</p>
+                    <p>No tasks for this block${isToday ? ' today' : ''}.<br>Head to Edit to add some!</p>
                 </div>`;
         } else {
             visibleTasks.forEach(task => {
-                const checked = getCompletion(dateStr, task.id);
+                const checked = getCompletion(activeDate, task.id);
                 const item = document.createElement('div');
                 item.className = 'checklist-item' + (checked ? ' checked' : '');
                 item.style.borderLeftColor = block ? getBlockColor(block) : '#3b82f6';
@@ -895,47 +932,51 @@
                         <span class="task-text">${recurHtml}${escapeHtml(task.text)}</span>
                         ${metaHtml}
                     </div>`;
-                item.addEventListener('click', () => { setTaskCompletion(dateStr, task.id, !checked); renderToday(); });
+                item.addEventListener('click', () => { setTaskCompletion(activeDate, task.id, !checked); renderToday(); });
                 container.appendChild(item);
             });
         }
 
-        // Quick-add
-        const quickAdd = document.createElement('div');
-        quickAdd.className = 'quick-add-container';
-        quickAdd.innerHTML = `
-            <button class="btn-quick-add" id="btn-quick-add-toggle">+ Add Task to ${block ? block.name : 'Block'}</button>
-            <div class="quick-add-input-row hidden" id="quick-add-row">
-                <input type="text" id="quick-add-input" class="quick-add-input" placeholder="What needs to get done?" autocomplete="off">
-                <button class="btn-quick-add-confirm" id="btn-quick-add-confirm">Add</button>
-            </div>`;
-        container.appendChild(quickAdd);
+        // Quick-add (only on today or future dates)
+        const isFuture = activeDate >= todayStr();
+        if (isFuture) {
+            const quickAdd = document.createElement('div');
+            quickAdd.className = 'quick-add-container';
+            quickAdd.innerHTML = `
+                <button class="btn-quick-add" id="btn-quick-add-toggle">+ Add Task to ${block ? block.name : 'Block'}</button>
+                <div class="quick-add-input-row hidden" id="quick-add-row">
+                    <input type="text" id="quick-add-input" class="quick-add-input" placeholder="What needs to get done?" autocomplete="off">
+                    <button class="btn-quick-add-confirm" id="btn-quick-add-confirm">Add</button>
+                </div>`;
+            container.appendChild(quickAdd);
 
-        const toggleBtn = quickAdd.querySelector('#btn-quick-add-toggle');
-        const inputRow = quickAdd.querySelector('#quick-add-row');
-        const qInput = quickAdd.querySelector('#quick-add-input');
-        const confirmBtn = quickAdd.querySelector('#btn-quick-add-confirm');
-        toggleBtn.addEventListener('click', () => { toggleBtn.classList.add('hidden'); inputRow.classList.remove('hidden'); qInput.focus(); });
+            const toggleBtn = quickAdd.querySelector('#btn-quick-add-toggle');
+            const inputRow = quickAdd.querySelector('#quick-add-row');
+            const qInput = quickAdd.querySelector('#quick-add-input');
+            const confirmBtn = quickAdd.querySelector('#btn-quick-add-confirm');
+            toggleBtn.addEventListener('click', () => { toggleBtn.classList.add('hidden'); inputRow.classList.remove('hidden'); qInput.focus(); });
 
-        function addQuickTask() {
-            const text = qInput.value.trim();
-            if (!text || !selectedBlock) return;
-            const maxOrder = state.tasks.reduce((m, t) => Math.max(m, t.sortOrder || 0), 0);
-            state.tasks.push({ id: genTaskId(), text, blockId: selectedBlock, days: [dayName], time: '', duration: '', recurrence: null, sortOrder: maxOrder + 1 });
-            saveState(); renderToday();
+            function addQuickTask() {
+                const text = qInput.value.trim();
+                if (!text || !selectedBlock) return;
+                const maxOrder = state.tasks.reduce((m, t) => Math.max(m, t.sortOrder || 0), 0);
+                state.tasks.push({ id: genTaskId(), text, blockId: selectedBlock, days: [dayName], time: '', duration: '', recurrence: null, sortOrder: maxOrder + 1 });
+                saveState(); renderToday();
+            }
+            confirmBtn.addEventListener('click', addQuickTask);
+            qInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') addQuickTask();
+                if (e.key === 'Escape') { toggleBtn.classList.remove('hidden'); inputRow.classList.add('hidden'); }
+            });
         }
-        confirmBtn.addEventListener('click', addQuickTask);
-        qInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') addQuickTask();
-            if (e.key === 'Escape') { toggleBtn.classList.remove('hidden'); inputRow.classList.add('hidden'); }
-        });
 
         // ── To-Dos ──────────────────────────────────────────────
         const todoContainer = document.getElementById('today-todos');
         todoContainer.innerHTML = '';
-        const todos = getTodos(dateStr);
+        const todos = getTodos(activeDate);
 
-        todoContainer.innerHTML = `<div class="todo-header"><h3>📝 Today's To-Dos</h3></div>`;
+        const todoLabel = isToday ? "Today's To-Dos" : 'To-Dos';
+        todoContainer.innerHTML = `<div class="todo-header"><h3>📝 ${todoLabel}</h3></div>`;
 
         if (todos.length > 0) {
             const todoList = document.createElement('div');
@@ -957,11 +998,11 @@
                     </button>`;
                 item.addEventListener('click', (e) => {
                     if (e.target.closest('.btn-inline-delete')) return;
-                    todos[i].done = !todos[i].done; updateHistory(dateStr); saveState(); renderToday();
+                    todos[i].done = !todos[i].done; updateHistory(activeDate); saveState(); renderToday();
                 });
                 item.querySelector('.btn-inline-delete').addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    if (await showConfirm(`Remove "${todo.text}"?`)) { todos.splice(i, 1); updateHistory(dateStr); saveState(); renderToday(); }
+                    if (await showConfirm(`Remove "${todo.text}"?`)) { todos.splice(i, 1); updateHistory(activeDate); saveState(); renderToday(); }
                 });
                 todoList.appendChild(item);
             });
@@ -974,7 +1015,7 @@
         todoAdd.innerHTML = `
             <button class="btn-quick-add btn-quick-add-todo" id="btn-todo-add-toggle">+ Add To-Do</button>
             <div class="quick-add-input-row hidden" id="todo-add-row">
-                <input type="text" id="todo-add-input" class="quick-add-input" placeholder="What else needs doing today?" autocomplete="off">
+                <input type="text" id="todo-add-input" class="quick-add-input" placeholder="What else needs doing?" autocomplete="off">
                 <button class="btn-quick-add-confirm btn-todo-confirm" id="btn-todo-add-confirm">Add</button>
             </div>`;
         todoContainer.appendChild(todoAdd);
@@ -984,22 +1025,29 @@
         const todoInput = todoAdd.querySelector('#todo-add-input');
         const todoConfirm = todoAdd.querySelector('#btn-todo-add-confirm');
         todoToggle.addEventListener('click', () => { todoToggle.classList.add('hidden'); todoRow.classList.remove('hidden'); todoInput.focus(); });
-        function addTodo() { const text = todoInput.value.trim(); if (!text) return; todos.push({ text, done: false }); updateHistory(dateStr); saveState(); renderToday(); }
+        function addTodo() { const text = todoInput.value.trim(); if (!text) return; todos.push({ text, done: false }); updateHistory(activeDate); saveState(); renderToday(); }
         todoConfirm.addEventListener('click', addTodo);
         todoInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') addTodo();
             if (e.key === 'Escape') { todoToggle.classList.remove('hidden'); todoRow.classList.add('hidden'); }
         });
 
-        // ── Scheduled Panel (Overdue + Upcoming) ────────────────
-        renderScheduledPanel();
+        // ── Scheduled Panel (Overdue + Upcoming) — only on today ──
+        const scheduledContainer = document.getElementById('today-scheduled');
+        if (scheduledContainer) {
+            if (isToday) {
+                renderScheduledPanel();
+            } else {
+                scheduledContainer.innerHTML = '';
+            }
+        }
 
         // Progress bar
         let totalDone = 0, totalTasks = 0;
         for (const bl of dayBlocks) {
             for (const t of getTasksForDayAndBlock(dayName, bl.id)) {
-                if (!isTaskDueOnDate(t, dateStr)) continue;
-                totalTasks++; if (getCompletion(dateStr, t.id)) totalDone++;
+                if (!isTaskDueOnDate(t, activeDate)) continue;
+                totalTasks++; if (getCompletion(activeDate, t.id)) totalDone++;
             }
         }
         totalTasks += todos.length;
@@ -1091,16 +1139,38 @@
                 const dayLabel = formatDateLabel(dueDate);
                 const daysText = daysOut === 1 ? 'tomorrow' : `in ${daysOut} days`;
 
+                // Contextual actions: Do Today only for items within 2 days
+                const showDoToday = daysOut <= 2;
+                const actionsHtml = `
+                    <div class="scheduled-actions">
+                        ${showDoToday ? '<button class="sched-btn sched-do-today" title="Add to today">Do Today</button>' : ''}
+                        <button class="sched-btn sched-skip" title="Skip this one">Skip</button>
+                        <button class="sched-btn sched-reschedule" title="Pick a new date">Reschedule</button>
+                    </div>`;
+
                 item.innerHTML = `
                     <div class="scheduled-item-content">
                         <span class="scheduled-task-text">🔁 ${escapeHtml(task.text)}</span>
                         <span class="scheduled-meta upcoming-meta">${dayLabel} (${daysText})</span>
                     </div>
-                    <div class="scheduled-actions">
-                        <button class="sched-btn sched-reschedule-upcoming" title="Reschedule">📅</button>
-                    </div>`;
+                    ${actionsHtml}`;
 
-                item.querySelector('.sched-reschedule-upcoming').addEventListener('click', async () => {
+                if (showDoToday) {
+                    item.querySelector('.sched-do-today').addEventListener('click', () => {
+                        doTaskToday(task.id, dueDate);
+                        showToast('✅ Added to today\'s to-dos');
+                        renderToday();
+                    });
+                }
+                item.querySelector('.sched-skip').addEventListener('click', async () => {
+                    const dueDateLabel = new Date(dueDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                    if (await showConfirm(`Skip "${task.text}" (${dueDateLabel})?`, 'Skip')) {
+                        skipTask(task.id, dueDate);
+                        showToast('⏭️ Skipped');
+                        renderToday();
+                    }
+                });
+                item.querySelector('.sched-reschedule').addEventListener('click', async () => {
                     const newDate = await showRescheduleModal(task.id, dueDate);
                     if (newDate) {
                         rescheduleTask(task.id, dueDate, newDate);

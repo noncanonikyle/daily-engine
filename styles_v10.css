@@ -127,6 +127,63 @@ body {
     letter-spacing: -0.02em;
 }
 
+/* --- Day Navigation --- */
+.day-nav-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.day-nav-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition);
+    font-family: inherit;
+    line-height: 1;
+}
+.day-nav-btn:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-light);
+}
+.day-nav-btn:active {
+    transform: scale(0.92);
+}
+
+.day-nav-today-pill {
+    padding: 6px 18px;
+    border-radius: var(--radius-pill);
+    border: 1.5px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all var(--transition);
+    font-family: inherit;
+}
+.day-nav-today-pill:hover {
+    border-color: var(--border-light);
+    color: var(--text-primary);
+}
+.day-nav-today-pill.active {
+    background: var(--accent-workday);
+    border-color: var(--accent-workday);
+    color: #fff;
+    cursor: default;
+}
+
 /* --- Pill Row --- */
 .pill-row {
     display: flex;
