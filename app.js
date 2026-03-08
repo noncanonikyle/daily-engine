@@ -271,6 +271,65 @@
         });
     }
 
+    // Pull latest from cloud if it's newer than local (for multi-device sync)
+    let isPulling = false;
+    function pullFromCloudIfNewer() {
+        if (!cloudSyncEnabled || !firebaseDb || isPulling) return;
+        const code = localStorage.getItem(RECOVERY_CODE_KEY);
+        if (!code) return;
+
+        isPulling = true;
+        updateSyncIndicator('syncing');
+
+        firebaseDb.ref('users/' + code).once('value').then((snapshot) => {
+            const cloudData = snapshot.val();
+            isPulling = false;
+            if (!cloudData || !cloudData._syncTime) {
+                updateSyncIndicator('synced');
+                return;
+            }
+
+            // Compare timestamps: cloud _syncTime vs local _backupTime
+            const localBackup = localStorage.getItem(BACKUP_KEY);
+            let localTime = null;
+            if (localBackup) {
+                try {
+                    const parsed = JSON.parse(localBackup);
+                    localTime = parsed._backupTime ? new Date(parsed._backupTime) : null;
+                } catch (e) { /* ignore */ }
+            }
+
+            const cloudTime = new Date(cloudData._syncTime);
+            const isCloudNewer = !localTime || cloudTime > localTime;
+
+            if (isCloudNewer) {
+                // Cloud has newer data — pull it in
+                console.info('☁️ Cloud data is newer, pulling…', {
+                    cloud: cloudData._syncTime,
+                    local: localTime ? localTime.toISOString() : 'none'
+                });
+                state = ensureStateFields(cloudData);
+                // Save locally WITHOUT triggering another cloud push
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                    const backupCopy = JSON.parse(JSON.stringify(state));
+                    backupCopy._backupTime = new Date().toISOString();
+                    localStorage.setItem(BACKUP_KEY, JSON.stringify(backupCopy));
+                } catch (e) {
+                    console.warn('Failed to save pulled state', e);
+                }
+                // Re-render current view
+                switchView(currentView);
+                showToast('☁️ Synced latest from cloud');
+            }
+            updateSyncIndicator('synced');
+        }).catch((err) => {
+            isPulling = false;
+            updateSyncIndicator('error');
+            console.warn('☁️ Pull failed:', err);
+        });
+    }
+
     function updateSyncIndicator(status) {
         let indicator = document.getElementById('sync-indicator');
         if (!indicator) return;
@@ -1744,6 +1803,13 @@
                 renderToday();
             }
         }, 60000);
+
+        // Auto-pull from cloud when app regains focus (multi-device sync)
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && cloudSyncEnabled) {
+                pullFromCloudIfNewer();
+            }
+        });
     }
 
     // Register service worker
