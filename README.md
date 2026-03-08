@@ -1,150 +1,109 @@
 # ⚡ Daily Engine
 
-A time-aware daily routine checklist PWA (Progressive Web App) that keeps your life on track.
+A time-aware daily routine checklist that lives on your phone. It shows you what to do based on the **time of day** and **day of the week** — so you always know what's next.
 
-## What Is This?
-
-A web app that acts like a native iPhone app. It shows you a customized checklist based on the **time of day** and **day of the week** — so you always know what you should be doing right now.
-
-### Features
-- 🕐 **Time-aware**: Automatically shows Morning, Workday, or Evening tasks
-- 📅 **Day-specific**: Different schedules for each day (weekday vs weekend)
-- ✅ **Tap to check off**: Satisfying checklist with progress bar
-- 📊 **Progress tracking**: See your daily and weekly stats
-- ✏️ **Fully editable**: Add, remove, reorder tasks for any day/block
-- ⏰ **Custom time blocks**: Set your own morning/workday/evening hours
-- 🌙 **Dark mode**: Easy on the eyes
-- 📴 **Works offline**: Cached on your phone after first visit
-- 📱 **Installable**: Add to home screen, launches like a real app
+**👉 Get the app: [noncanonikyle.github.io/daily-engine](https://noncanonikyle.github.io/daily-engine/)**
 
 ---
 
-## 🚀 How To Deploy & Install On Your iPhone
+## 📱 Install on Your Phone
 
-### Option 1: GitHub Pages (FREE, easiest)
-
-#### Step 1: Create a GitHub account (if you don't have one)
-1. Go to [github.com](https://github.com)
-2. Sign up for a free account
-
-#### Step 2: Create a new repository
-1. Click the **"+"** button (top right) → **New repository**
-2. Name it: `daily-engine`
-3. Make it **Public** (required for free GitHub Pages)
-4. Click **Create repository**
-
-#### Step 3: Upload the files
-1. On the repository page, click **"uploading an existing file"**
-2. Drag and drop ALL these files from the `daily-engine` folder:
-   - `index.html`
-   - `styles.css`
-   - `app.js`
-   - `sw.js`
-   - `manifest.json`
-   - `icons/` folder (with both SVG files)
-3. Click **Commit changes**
-
-#### Step 4: Enable GitHub Pages
-1. Go to your repo → **Settings** tab
-2. Scroll to **Pages** (left sidebar)
-3. Under "Source", select **main** branch
-4. Click **Save**
-5. Wait 1-2 minutes, then your app will be live at:
-   ```
-   https://YOUR-USERNAME.github.io/daily-engine/
-   ```
-
-#### Step 5: Install on your iPhone
-1. Open **Safari** on your iPhone (must be Safari, not Chrome)
-2. Go to `https://YOUR-USERNAME.github.io/daily-engine/`
-3. Tap the **Share** button (square with arrow pointing up)
-4. Scroll down and tap **"Add to Home Screen"**
+### iPhone
+1. Open **Safari** (must be Safari, not Chrome)
+2. Go to **[noncanonikyle.github.io/daily-engine](https://noncanonikyle.github.io/daily-engine/)**
+3. Tap the **Share** button (square with arrow ↑)
+4. Tap **"Add to Home Screen"**
 5. Name it "Daily Engine" → tap **Add**
-6. 🎉 The app icon now appears on your home screen!
+6. 🎉 It's on your home screen — launches like a real app!
+
+### Android
+1. Open **Chrome**
+2. Go to **[noncanonikyle.github.io/daily-engine](https://noncanonikyle.github.io/daily-engine/)**
+3. You should see an **"Install App"** banner — tap it
+4. Or tap the **⋮ menu** → **"Add to Home Screen"**
+
+### Desktop
+Just bookmark the URL. It works great in any modern browser too.
 
 ---
 
-### Option 2: Netlify (FREE, also easy)
+## ✨ Features
 
-1. Go to [netlify.com](https://www.netlify.com) and sign up
-2. Click **"Add new site"** → **Deploy manually**
-3. Drag and drop the entire `daily-engine` folder
-4. Your app gets a URL like `https://random-name.netlify.app`
-5. Install on iPhone using the same Safari → Add to Home Screen steps above
-
----
-
-### Option 3: Vercel (FREE)
-
-1. Go to [vercel.com](https://vercel.com) and sign up
-2. Install the Vercel CLI or use the dashboard
-3. Upload/deploy the `daily-engine` folder
-4. Same iPhone install steps as above
+- 🕐 **Time-aware** — automatically shows Morning, Workday/Free, or Evening tasks
+- 📅 **Day-specific** — different routines for weekdays vs weekends
+- ✅ **Tap to check off** — satisfying checklist with progress bar
+- 📝 **To-Do list** — separate section for one-off tasks (rolls forward if incomplete)
+- 📆 **Calendar view** — browse past days, see color-coded completion history
+- 🔥 **Streak counter** — track your consistency
+- ✏️ **Fully customizable** — add, remove, reorder tasks for any day and time block
+- ⏰ **Custom time blocks** — set your own morning/workday/evening hours
+- 🌙 **Dark mode** — easy on the eyes
+- 📴 **Works offline** — cached on your phone after first visit
+- 💾 **Your data stays private** — everything is stored locally on your device, never sent anywhere
+- 🔄 **Backup & restore** — export, copy, or generate a backup link
 
 ---
 
-## 🧪 Testing Locally (On Your Computer)
+## 🔒 Privacy & Data
 
-To test the app in your browser before deploying:
+Your data **never leaves your device**. Everything is stored in your browser's local storage. There are no accounts, no servers, no tracking. Each person who uses the app has their own completely independent data.
 
-### Using Python (probably already installed):
-```bash
-cd daily-engine
-python3 -m http.server 8080
-```
-Then open: `http://localhost:8080`
-
-### Using Node.js:
-```bash
-npx serve daily-engine
-```
-
-### Using VS Code:
-Install the **"Live Server"** extension, then right-click `index.html` → **Open with Live Server**
+**Backup options** (found in the Edit view):
+- 📥 Export as JSON file
+- 📋 Copy to clipboard
+- 🔗 Generate a backup link
 
 ---
 
-## 📁 Project Structure
+## ❓ FAQ
+
+**Q: Do I need to create an account?**
+Nope. Just open the link and start using it.
+
+**Q: Do I need a GitHub account?**
+No! Only the developer needs that. You just use the link.
+
+**Q: Can other people see my tasks?**
+No. Your data is stored locally on your device only.
+
+**Q: Does it work offline?**
+Yes! After the first visit, everything is cached on your phone.
+
+**Q: What if I clear my browser data?**
+You'll lose your saved tasks and history. Use the backup feature in the Edit view to save a copy first!
+
+**Q: Does it work on Android?**
+Yes! Works on any modern phone or computer.
+
+---
+
+## 🛠️ For Developers
+
+### Project Structure
 
 ```
 daily-engine/
-├── index.html          # Main app HTML
-├── styles.css          # All styles (dark mode)
-├── app.js              # Core app logic
-├── sw.js               # Service worker (offline support)
-├── manifest.json       # PWA manifest (app metadata)
+├── index.html          # App shell
+├── styles.css          # Dark mode styles
+├── app.js              # Core logic
+├── sw.js               # Service worker (offline)
+├── manifest.json       # PWA manifest
 ├── icons/
 │   ├── icon-192.svg    # App icon (small)
 │   └── icon-512.svg    # App icon (large)
 └── README.md           # This file
 ```
 
-## 🔧 Customization
+### Self-Hosting
 
-### Editing Default Tasks
-Open `app.js` and find the `getDefaultSchedule()` function. Edit the arrays for each time block.
+If you want to host your own copy:
 
-### Changing Colors
-Open `styles.css` and edit the CSS variables in `:root { ... }` at the top.
+1. Fork or clone this repo
+2. Enable GitHub Pages (Settings → Pages → main branch)
+3. Your version will be at `https://YOUR-USERNAME.github.io/daily-engine/`
 
-### Changing Time Blocks
-Either edit in the app (Settings section of Edit view) or change `getDefaultTimeBlocks()` in `app.js`.
+Or deploy to Netlify/Vercel by dragging the folder into their dashboard.
 
----
+### Updating
 
-## ❓ FAQ
-
-**Q: Do I need an Apple Developer account?**
-No! This is a web app, not a native App Store app.
-
-**Q: Does it work offline?**
-Yes! After the first visit, the service worker caches everything.
-
-**Q: Where is my data stored?**
-Locally on your device in the browser's localStorage. It never leaves your phone.
-
-**Q: Can I use this on Android too?**
-Yes! Same steps but you'll get an "Install App" prompt in Chrome automatically.
-
-**Q: How do I update the app after deploying?**
-Just update the files on GitHub/Netlify/Vercel. Bump the `CACHE_NAME` version in `sw.js` to force a refresh.
+After making code changes, bump the `CACHE_NAME` version in `sw.js` to force a cache refresh for existing users.
