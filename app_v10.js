@@ -112,6 +112,7 @@
         if (!Array.isArray(p.archive)) p.archive = [];
         if (!p.todos) p.todos = {};
         if (!p.reschedules) p.reschedules = {};
+        if (!p.measurements) p.measurements = {};
         if (typeof p.bestStreak !== 'number') p.bestStreak = 0;
         p.blocks.forEach(b => { if (!b.id) b.id = genBlockId(); if (!b.color) b.color = 'blue'; if (!Array.isArray(b.groups)) b.groups = [{ days: ALL_DAYS.slice(), start: '09:00', end: '17:00' }]; });
         p.tasks.forEach(t => { if (!t.id) t.id = genTaskId(); if (!Array.isArray(t.days)) t.days = ALL_DAYS.slice(); });
@@ -127,6 +128,7 @@
             archive: [],
             todos: {},
             reschedules: {},
+            measurements: {},
             bestStreak: 0
         };
     }
@@ -386,7 +388,7 @@
     }
 
     function generateBackupUrl() {
-        const d = { blocks: state.blocks, tasks: state.tasks, archive: state.archive, todos: state.todos, reschedules: state.reschedules };
+        const d = { blocks: state.blocks, tasks: state.tasks, archive: state.archive, todos: state.todos, reschedules: state.reschedules, measurements: state.measurements };
         return window.location.origin + window.location.pathname + '#backup=' + btoa(encodeURIComponent(JSON.stringify(d)));
     }
 
@@ -464,6 +466,39 @@
             overlay.querySelector('.confirm-cancel').addEventListener('click', () => close(false));
             overlay.querySelector('.confirm-yes').addEventListener('click', () => close(true));
             overlay.addEventListener('click', (e) => { if (e.target === overlay) close(false); });
+        });
+    }
+
+    function showMeasurementModal(taskName, unit) {
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'confirm-overlay';
+            overlay.innerHTML = `
+                <div class="confirm-dialog measurement-dialog">
+                    <h3 class="measurement-title">📏 Log Measurement</h3>
+                    <p class="measurement-subtitle">${escapeHtml(taskName)}</p>
+                    <div class="measurement-input-row">
+                        <input type="number" step="any" class="measurement-input" id="measurement-value" placeholder="0" autocomplete="off" inputmode="decimal">
+                        <span class="measurement-unit">${escapeHtml(unit || '')}</span>
+                    </div>
+                    <div class="confirm-buttons">
+                        <button class="confirm-btn confirm-cancel">Skip</button>
+                        <button class="confirm-btn confirm-yes">Log</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            requestAnimationFrame(() => { overlay.classList.add('visible'); overlay.querySelector('#measurement-value').focus(); });
+            const close = (val) => { overlay.classList.remove('visible'); setTimeout(() => overlay.remove(), 200); resolve(val); };
+            overlay.querySelector('.confirm-cancel').addEventListener('click', () => close(null));
+            overlay.querySelector('.confirm-yes').addEventListener('click', () => {
+                const v = parseFloat(overlay.querySelector('#measurement-value').value);
+                close(isNaN(v) ? null : v);
+            });
+            overlay.querySelector('#measurement-value').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') overlay.querySelector('.confirm-yes').click();
+                if (e.key === 'Escape') close(null);
+            });
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(null); });
         });
     }
 
@@ -819,28 +854,33 @@
     const btnToday = document.getElementById('btn-today');
     const btnEdit = document.getElementById('btn-edit');
     const btnStats = document.getElementById('btn-stats');
+    const btnTrack = document.getElementById('btn-track');
     const views = {
         today: document.getElementById('view-today'),
         edit: document.getElementById('view-edit'),
-        stats: document.getElementById('view-stats')
+        stats: document.getElementById('view-stats'),
+        track: document.getElementById('view-track')
     };
 
     function switchView(name) {
         currentView = name;
         Object.values(views).forEach(v => v.classList.remove('active'));
         views[name].classList.add('active');
-        [btnToday, btnEdit, btnStats].forEach(b => b.classList.remove('active'));
+        [btnToday, btnEdit, btnStats, btnTrack].forEach(b => b.classList.remove('active'));
         if (name === 'today') btnToday.classList.add('active');
         if (name === 'edit') btnEdit.classList.add('active');
         if (name === 'stats') btnStats.classList.add('active');
+        if (name === 'track') btnTrack.classList.add('active');
         if (name === 'today') renderToday();
         if (name === 'edit') renderEdit();
         if (name === 'stats') renderStats();
+        if (name === 'track') renderTrack();
     }
 
     btnToday.addEventListener('click', () => { viewingDate = null; selectedBlock = null; manualBlockSelection = false; switchView('today'); });
     btnEdit.addEventListener('click', () => switchView('edit'));
     btnStats.addEventListener('click', () => switchView('stats'));
+    btnTrack.addEventListener('click', () => switchView('track'));
 
     // ══════════════════════════════════════════════════════════
     // ── TODAY VIEW ────────────────────────────────────────────
@@ -919,35 +959,41 @@
             streakEl.classList.add('hidden');
         }
 
-        // Time block pills
+        // Time block pills (scroll anchors — tapping scrolls to that section)
         const pillRow = document.getElementById('time-block-pills');
         pillRow.innerHTML = '';
         for (const block of dayBlocks) {
             const pill = document.createElement('button');
-            pill.className = 'pill' + (block.id === selectedBlock ? ' active' : '') + (isToday && currentBlk && block.id === currentBlk.id ? ' current-indicator' : '');
+            pill.className = 'pill' + (isToday && currentBlk && block.id === currentBlk.id ? ' current-indicator' : '');
             pill.dataset.blockId = block.id;
             pill.style.setProperty('--pill-color', getBlockColor(block));
             pill.textContent = block.name;
-            pill.addEventListener('click', () => { selectedBlock = block.id; manualBlockSelection = true; renderToday(); });
+            pill.addEventListener('click', () => {
+                // Scroll to that block section
+                const section = document.getElementById('block-section-' + block.id);
+                if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // Highlight this pill
+                pillRow.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+                pill.classList.add('active');
+            });
             pillRow.appendChild(pill);
         }
 
-        // Checklist
+        // Checklist — render ALL blocks in one continuous scrollable list
         const container = document.getElementById('today-checklist');
         container.innerHTML = '';
-        const block = getBlockById(selectedBlock);
+        const isFuture = activeDate >= todayStr();
 
-        // Gather tasks: assigned to this block + time-overridden into this block
-        let visibleTasks = [];
-        if (block) {
+        // Helper: gather tasks for a given block (including time-overrides)
+        function gatherTasksForBlock(block) {
             // Tasks natively assigned to this block
             const nativeTasks = getTasksForDayAndBlock(dayName, block.id)
                 .filter(t => isTaskDueOnDate(t, activeDate))
-                .map(t => ({ task: t, originBlock: null })); // originBlock null = native
+                .map(t => ({ task: t, originBlock: null }));
 
-            // Tasks assigned to OTHER blocks but whose start time falls in THIS block
+            // Tasks from OTHER blocks whose start time falls in THIS block
             const otherTasks = state.tasks.filter(t => {
-                if (t.blockId === block.id) return false; // already included
+                if (t.blockId === block.id) return false;
                 if (!t.days.includes(dayName)) return false;
                 if (!isTaskDueOnDate(t, activeDate)) return false;
                 const matched = getTimeMatchedBlock(t, dayName);
@@ -957,85 +1003,158 @@
             // Remove native tasks whose time actually falls in a different block
             const nativeFiltered = nativeTasks.filter(({ task }) => {
                 const matched = getTimeMatchedBlock(task, dayName);
-                // Keep if no time set, or if time matches this block, or if time doesn't match any block
                 return !matched || matched.id === block.id;
             });
 
-            visibleTasks = [...nativeFiltered, ...otherTasks];
-
-            // Sort all by start time
-            visibleTasks.sort((a, b) => parseTimeToMinutes(a.task.time) - parseTimeToMinutes(b.task.time));
+            const all = [...nativeFiltered, ...otherTasks];
+            all.sort((a, b) => parseTimeToMinutes(a.task.time) - parseTimeToMinutes(b.task.time));
+            return all;
         }
 
-        if (!visibleTasks.length) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-icon">📝</div>
-                    <p>No tasks for this block${isToday ? ' today' : ''}.<br>Head to Edit to add some!</p>
-                </div>`;
-        } else {
-            visibleTasks.forEach(({ task, originBlock }) => {
-                const checked = getCompletion(activeDate, task.id);
-                const item = document.createElement('div');
-                item.className = 'checklist-item' + (checked ? ' checked' : '') + (originBlock ? ' time-overridden' : '');
-                // Use original block color for overridden tasks, current block color for native
-                const displayColor = originBlock ? getBlockColor(originBlock) : (block ? getBlockColor(block) : '#3b82f6');
-                item.style.borderLeftColor = displayColor;
-                let metaHtml = '';
-                if (task.time || task.duration) {
-                    const parts = [];
-                    if (task.time) parts.push(task.time);
-                    if (task.duration) parts.push(task.duration);
-                    metaHtml = `<span class="task-meta">${escapeHtml(parts.join(' · '))}</span>`;
-                }
-                const recurHtml = task.recurrence ? `<span class="task-recur-badge">🔁</span>` : '';
-                const overrideBadge = originBlock ? `<span class="task-override-badge" style="color:${getBlockColor(originBlock)}">↗ ${escapeHtml(originBlock.name)}</span>` : '';
-                item.innerHTML = `
-                    <div class="custom-checkbox">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                    </div>
-                    <div class="task-content">
-                        <span class="task-text">${recurHtml}${escapeHtml(task.text)}${overrideBadge}</span>
-                        ${metaHtml}
-                    </div>`;
-                item.addEventListener('click', () => { setTaskCompletion(activeDate, task.id, !checked); renderToday(); });
-                container.appendChild(item);
-            });
-        }
+        // Render each block section
+        dayBlocks.forEach(block => {
+            const blockTasks = gatherTasksForBlock(block);
 
-        // Quick-add (only on today or future dates)
-        const isFuture = activeDate >= todayStr();
-        if (isFuture) {
-            const quickAdd = document.createElement('div');
-            quickAdd.className = 'quick-add-container';
-            quickAdd.innerHTML = `
-                <button class="btn-quick-add" id="btn-quick-add-toggle">+ Add Task to ${block ? block.name : 'Block'}</button>
-                <div class="quick-add-input-row hidden" id="quick-add-row">
-                    <input type="text" id="quick-add-input" class="quick-add-input" placeholder="What needs to get done?" autocomplete="off">
-                    <button class="btn-quick-add-confirm" id="btn-quick-add-confirm">Add</button>
-                </div>`;
-            container.appendChild(quickAdd);
+            // Section wrapper
+            const section = document.createElement('div');
+            section.className = 'block-section';
+            section.id = 'block-section-' + block.id;
 
-            const toggleBtn = quickAdd.querySelector('#btn-quick-add-toggle');
-            const inputRow = quickAdd.querySelector('#quick-add-row');
-            const qInput = quickAdd.querySelector('#quick-add-input');
-            const confirmBtn = quickAdd.querySelector('#btn-quick-add-confirm');
-            toggleBtn.addEventListener('click', () => { toggleBtn.classList.add('hidden'); inputRow.classList.remove('hidden'); qInput.focus(); });
+            // Section header
+            const header = document.createElement('div');
+            header.className = 'block-section-header';
+            header.style.borderLeftColor = getBlockColor(block);
+            const isCurrentBlock = isToday && currentBlk && block.id === currentBlk.id;
+            header.innerHTML = `
+                <span class="block-section-name">${escapeHtml(block.name)}</span>
+                ${isCurrentBlock ? '<span class="block-section-now">NOW</span>' : ''}
+                <span class="block-section-count">${blockTasks.filter(({ task }) => getCompletion(activeDate, task.id)).length}/${blockTasks.length}</span>`;
+            section.appendChild(header);
 
-            function addQuickTask() {
-                const text = qInput.value.trim();
-                if (!text || !selectedBlock) return;
-                const maxOrder = state.tasks.reduce((m, t) => Math.max(m, t.sortOrder || 0), 0);
-                state.tasks.push({ id: genTaskId(), text, blockId: selectedBlock, days: [dayName], time: '', duration: '', recurrence: null, sortOrder: maxOrder + 1 });
-                saveState(); renderToday();
+            // Tasks
+            if (blockTasks.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'block-section-empty';
+                empty.textContent = 'No tasks in this block';
+                section.appendChild(empty);
+            } else {
+                blockTasks.forEach(({ task, originBlock }) => {
+                    const checked = getCompletion(activeDate, task.id);
+                    const item = document.createElement('div');
+                    item.className = 'checklist-item' + (checked ? ' checked' : '') + (originBlock ? ' time-overridden' : '');
+                    const displayColor = originBlock ? getBlockColor(originBlock) : getBlockColor(block);
+                    item.style.borderLeftColor = displayColor;
+                    let metaHtml = '';
+                    if (task.time || task.duration) {
+                        const parts = [];
+                        if (task.time) parts.push(task.time);
+                        if (task.duration) parts.push(task.duration);
+                        metaHtml = `<span class="task-meta">${escapeHtml(parts.join(' · '))}</span>`;
+                    }
+                    const recurHtml = task.recurrence ? `<span class="task-recur-badge">🔁</span>` : '';
+                    const measureHtml = task.measurement ? `<span class="task-measure-badge">📏</span>` : '';
+                    const overrideBadge = originBlock ? `<span class="task-override-badge" style="color:${getBlockColor(originBlock)}">↗ ${escapeHtml(originBlock.name)}</span>` : '';
+                    let measureValueHtml = '';
+                    if (task.measurement && state.measurements[task.id] && state.measurements[task.id].length) {
+                        const last = state.measurements[task.id][state.measurements[task.id].length - 1];
+                        measureValueHtml = `<span class="task-measure-value">${last.value} ${escapeHtml(task.measurement.unit || '')}</span>`;
+                    }
+                    item.innerHTML = `
+                        <div class="custom-checkbox">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                        </div>
+                        <div class="task-content">
+                            <span class="task-text">${recurHtml}${measureHtml}${escapeHtml(task.text)}${overrideBadge}</span>
+                            ${metaHtml}
+                            ${measureValueHtml}
+                        </div>`;
+                    item.addEventListener('click', async () => {
+                        const newChecked = !checked;
+                        if (newChecked && task.measurement) {
+                            const value = await showMeasurementModal(task.text, task.measurement.unit);
+                            if (value !== null) {
+                                if (!state.measurements[task.id]) state.measurements[task.id] = [];
+                                state.measurements[task.id].push({ date: activeDate, value });
+                            }
+                        }
+                        setTaskCompletion(activeDate, task.id, newChecked);
+                        renderToday();
+                    });
+                    section.appendChild(item);
+                });
             }
-            confirmBtn.addEventListener('click', addQuickTask);
-            qInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') addQuickTask();
-                if (e.key === 'Escape') { toggleBtn.classList.remove('hidden'); inputRow.classList.add('hidden'); }
+
+            // Quick-add per block (only on today or future dates)
+            if (isFuture) {
+                const quickAdd = document.createElement('div');
+                quickAdd.className = 'quick-add-container';
+                const qId = 'qa-' + block.id;
+                quickAdd.innerHTML = `
+                    <button class="btn-quick-add" data-qa="${qId}">+ Add to ${escapeHtml(block.name)}</button>
+                    <div class="quick-add-input-row hidden" data-qa-row="${qId}">
+                        <input type="text" class="quick-add-input" data-qa-input="${qId}" placeholder="What needs to get done?" autocomplete="off">
+                        <button class="btn-quick-add-confirm" data-qa-confirm="${qId}">Add</button>
+                    </div>`;
+                section.appendChild(quickAdd);
+
+                const toggleBtn = quickAdd.querySelector(`[data-qa="${qId}"]`);
+                const inputRow = quickAdd.querySelector(`[data-qa-row="${qId}"]`);
+                const qInput = quickAdd.querySelector(`[data-qa-input="${qId}"]`);
+                const confirmBtn = quickAdd.querySelector(`[data-qa-confirm="${qId}"]`);
+                toggleBtn.addEventListener('click', () => { toggleBtn.classList.add('hidden'); inputRow.classList.remove('hidden'); qInput.focus(); });
+
+                const addQuickTask = () => {
+                    const text = qInput.value.trim();
+                    if (!text) return;
+                    const maxOrder = state.tasks.reduce((m, t) => Math.max(m, t.sortOrder || 0), 0);
+                    state.tasks.push({ id: genTaskId(), text, blockId: block.id, days: [dayName], time: '', duration: '', recurrence: null, sortOrder: maxOrder + 1 });
+                    saveState(); renderToday();
+                };
+                confirmBtn.addEventListener('click', addQuickTask);
+                qInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') addQuickTask();
+                    if (e.key === 'Escape') { toggleBtn.classList.remove('hidden'); inputRow.classList.add('hidden'); }
+                });
+            }
+
+            container.appendChild(section);
+        });
+
+        // IntersectionObserver to update active pill as user scrolls
+        const observerCallback = (entries) => {
+            let topVisible = null;
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    if (!topVisible || entry.boundingClientRect.top < topVisible.boundingClientRect.top) {
+                        topVisible = entry;
+                    }
+                }
             });
+            if (topVisible) {
+                const blockId = topVisible.target.id.replace('block-section-', '');
+                pillRow.querySelectorAll('.pill').forEach(p => {
+                    p.classList.toggle('active', p.dataset.blockId === blockId);
+                });
+            }
+        };
+        const observer = new IntersectionObserver(observerCallback, {
+            root: null,
+            rootMargin: '-80px 0px -60% 0px',
+            threshold: 0
+        });
+        dayBlocks.forEach(block => {
+            const el = document.getElementById('block-section-' + block.id);
+            if (el) observer.observe(el);
+        });
+
+        // Auto-scroll to current block on initial load (today only)
+        if (isToday && currentBlk) {
+            const currentSection = document.getElementById('block-section-' + currentBlk.id);
+            if (currentSection) {
+                setTimeout(() => currentSection.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+            }
         }
 
         // ── To-Dos ──────────────────────────────────────────────
@@ -1471,6 +1590,18 @@
                             <input type="date" class="recur-start" value="${task.recurrence ? task.recurrence.startDate : todayStr()}">
                         </div>
                     </div>
+                    <div class="edit-task-row-measure">
+                        <label class="measure-toggle-label">
+                            <input type="checkbox" class="measure-checkbox" ${task.measurement ? 'checked' : ''}>
+                            <span>📏 Track measurement</span>
+                        </label>
+                        <div class="measure-fields ${task.measurement ? '' : 'hidden'}">
+                            <span>Unit</span>
+                            <input type="text" class="measure-unit-input" value="${escapeAttr(task.measurement ? task.measurement.unit : '')}" placeholder="e.g. lbs, kg, mins">
+                            <span>Goal</span>
+                            <input type="number" step="any" class="measure-goal-input" value="${task.measurement && task.measurement.goal ? task.measurement.goal : ''}" placeholder="optional">
+                        </div>
+                    </div>
                 </div>`;
 
             // Bindings
@@ -1504,6 +1635,19 @@
             item.querySelector('.recur-every').addEventListener('input', (e) => { if (task.recurrence) { task.recurrence.every = parseInt(e.target.value) || 1; saveState(); } });
             item.querySelector('.recur-unit').addEventListener('change', (e) => { if (task.recurrence) { task.recurrence.unit = e.target.value; saveState(); } });
             item.querySelector('.recur-start').addEventListener('change', (e) => { if (task.recurrence) { task.recurrence.startDate = e.target.value; saveState(); } });
+
+            // Measurement bindings
+            const measureCb = item.querySelector('.measure-checkbox');
+            const measureF = item.querySelector('.measure-fields');
+            measureCb.addEventListener('change', () => {
+                if (measureCb.checked) {
+                    measureF.classList.remove('hidden');
+                    task.measurement = { unit: item.querySelector('.measure-unit-input').value.trim() || '', goal: parseFloat(item.querySelector('.measure-goal-input').value) || null };
+                } else { measureF.classList.add('hidden'); task.measurement = null; }
+                saveState();
+            });
+            item.querySelector('.measure-unit-input').addEventListener('input', (e) => { if (task.measurement) { task.measurement.unit = e.target.value.trim(); saveState(); } });
+            item.querySelector('.measure-goal-input').addEventListener('input', (e) => { if (task.measurement) { task.measurement.goal = parseFloat(e.target.value) || null; saveState(); } });
 
             item.querySelector('.btn-delete-task').addEventListener('click', async () => {
                 if (await showConfirm(`Remove "${task.text || '(empty)'}"?`)) {
@@ -1726,6 +1870,274 @@
         } else { html += '<div class="cal-detail-summary">No data for this day</div>'; }
         html += '</div>';
         detailEl.innerHTML = html;
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // ── TRACK VIEW (Measurements) ─────────────────────────────
+    // ══════════════════════════════════════════════════════════
+    let trackRanges = {}; // taskId -> { range: '1M', offset: 0 }
+
+    function renderTrack() {
+        const container = document.getElementById('track-content');
+        container.innerHTML = '';
+
+        // Find all tasks with measurement enabled
+        const measurableTasks = state.tasks.filter(t => t.measurement);
+
+        if (!measurableTasks.length) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">📊</div>
+                    <p>No measurable tasks yet.<br>Go to Edit → enable "📏 Track measurement" on a task.</p>
+                </div>`;
+            return;
+        }
+
+        measurableTasks.forEach(task => {
+            const card = document.createElement('div');
+            card.className = 'track-card';
+            const block = getBlockById(task.blockId);
+            card.style.borderLeftColor = block ? getBlockColor(block) : 'var(--border)';
+
+            // Get or init range state
+            if (!trackRanges[task.id]) trackRanges[task.id] = { range: '1M', offset: 0 };
+            const rs = trackRanges[task.id];
+
+            const data = (state.measurements[task.id] || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+
+            // Header
+            const header = document.createElement('div');
+            header.className = 'track-card-header';
+            header.innerHTML = `
+                <div>
+                    <span class="track-task-name">${escapeHtml(task.text)}</span>
+                    <span class="track-task-unit">${escapeHtml(task.measurement.unit || '')}</span>
+                </div>
+                <div class="track-latest">
+                    ${data.length ? `<span class="track-latest-value">${data[data.length - 1].value}</span> <span class="track-latest-unit">${escapeHtml(task.measurement.unit || '')}</span>` : '<span class="track-no-data">No data yet</span>'}
+                </div>`;
+            card.appendChild(header);
+
+            // Range toggle buttons
+            const rangeRow = document.createElement('div');
+            rangeRow.className = 'track-range-row';
+            ['1W', '1M', '6M', '1Y'].forEach(r => {
+                const btn = document.createElement('button');
+                btn.className = 'track-range-btn' + (rs.range === r ? ' active' : '');
+                btn.textContent = r;
+                btn.addEventListener('click', () => { rs.range = r; rs.offset = 0; renderTrack(); });
+                rangeRow.appendChild(btn);
+            });
+            card.appendChild(rangeRow);
+
+            // Navigation arrows + chart
+            const chartRow = document.createElement('div');
+            chartRow.className = 'track-chart-row';
+
+            const prevBtn = document.createElement('button');
+            prevBtn.className = 'track-nav-btn';
+            prevBtn.textContent = '‹';
+            prevBtn.addEventListener('click', () => { rs.offset++; renderTrack(); });
+
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'track-nav-btn';
+            nextBtn.textContent = '›';
+            nextBtn.disabled = rs.offset === 0;
+            nextBtn.addEventListener('click', () => { if (rs.offset > 0) { rs.offset--; renderTrack(); } });
+
+            const canvasWrap = document.createElement('div');
+            canvasWrap.className = 'track-canvas-wrap';
+            const canvas = document.createElement('canvas');
+            canvas.className = 'track-canvas';
+            canvas.width = 600;
+            canvas.height = 220;
+            canvasWrap.appendChild(canvas);
+
+            chartRow.appendChild(prevBtn);
+            chartRow.appendChild(canvasWrap);
+            chartRow.appendChild(nextBtn);
+            card.appendChild(chartRow);
+
+            // Data count
+            const countEl = document.createElement('div');
+            countEl.className = 'track-data-count';
+            countEl.textContent = `${data.length} measurement${data.length !== 1 ? 's' : ''} logged`;
+            card.appendChild(countEl);
+
+            container.appendChild(card);
+
+            // Draw chart after DOM insertion
+            requestAnimationFrame(() => drawMeasurementChart(canvas, data, task.measurement, rs));
+        });
+    }
+
+    function drawMeasurementChart(canvas, data, measurement, rangeState) {
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+
+        // Scale for high-DPI
+        const rect = canvas.parentElement.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = 220 * dpr;
+        canvas.style.width = rect.width + 'px';
+        canvas.style.height = '220px';
+        ctx.scale(dpr, dpr);
+
+        const W = rect.width;
+        const H = 220;
+        const pad = { top: 25, right: 15, bottom: 35, left: 45 };
+        const chartW = W - pad.left - pad.right;
+        const chartH = H - pad.top - pad.bottom;
+
+        // Clear
+        ctx.clearRect(0, 0, W, H);
+
+        // Compute date range
+        const rangeDays = { '1W': 7, '1M': 30, '6M': 182, '1Y': 365 }[rangeState.range] || 30;
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() - rangeState.offset * rangeDays);
+        const startDate = new Date(endDate);
+        startDate.setDate(startDate.getDate() - rangeDays);
+
+        const startStr = dateStr(startDate);
+        const endStr = dateStr(endDate);
+
+        // Filter data to range
+        const rangeData = data.filter(d => d.date >= startStr && d.date <= endStr);
+
+        // Date label for range
+        const rangeLabel = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' — ' +
+            endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+        ctx.fillStyle = '#8888a8';
+        ctx.font = '11px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(rangeLabel, W / 2, H - 5);
+
+        if (rangeData.length === 0) {
+            ctx.fillStyle = '#55556a';
+            ctx.font = '13px -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('No data in this range', W / 2, H / 2);
+            return;
+        }
+
+        // Compute Y range
+        const values = rangeData.map(d => d.value);
+        let minY = Math.min(...values);
+        let maxY = Math.max(...values);
+        if (measurement.goal) {
+            minY = Math.min(minY, measurement.goal);
+            maxY = Math.max(maxY, measurement.goal);
+        }
+        const yPad = (maxY - minY) * 0.15 || 1;
+        minY -= yPad;
+        maxY += yPad;
+
+        // X scale: days from startDate
+        const totalDays = rangeDays;
+        function xPos(ds) {
+            const d = new Date(ds + 'T12:00:00');
+            const diff = (d - startDate) / (1000 * 60 * 60 * 24);
+            return pad.left + (diff / totalDays) * chartW;
+        }
+        function yPos(v) {
+            return pad.top + chartH - ((v - minY) / (maxY - minY)) * chartH;
+        }
+
+        // Grid lines
+        ctx.strokeStyle = '#2a2a3e';
+        ctx.lineWidth = 0.5;
+        const gridLines = 5;
+        for (let i = 0; i <= gridLines; i++) {
+            const y = pad.top + (i / gridLines) * chartH;
+            ctx.beginPath();
+            ctx.moveTo(pad.left, y);
+            ctx.lineTo(W - pad.right, y);
+            ctx.stroke();
+
+            // Y-axis labels
+            const val = maxY - (i / gridLines) * (maxY - minY);
+            ctx.fillStyle = '#8888a8';
+            ctx.font = '10px -apple-system, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(val.toFixed(1), pad.left - 6, y + 3);
+        }
+
+        // Goal line
+        if (measurement.goal) {
+            const gy = yPos(measurement.goal);
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.moveTo(pad.left, gy);
+            ctx.lineTo(W - pad.right, gy);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            ctx.fillStyle = '#10b981';
+            ctx.font = '10px -apple-system, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('Goal: ' + measurement.goal, W - pad.right - 60, gy - 6);
+        }
+
+        // Data line
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        rangeData.forEach((d, i) => {
+            const x = xPos(d.date);
+            const y = yPos(d.value);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Gradient fill under line
+        const gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + chartH);
+        gradient.addColorStop(0, 'rgba(59, 130, 246, 0.3)');
+        gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        rangeData.forEach((d, i) => {
+            const x = xPos(d.date);
+            const y = yPos(d.value);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.lineTo(xPos(rangeData[rangeData.length - 1].date), pad.top + chartH);
+        ctx.lineTo(xPos(rangeData[0].date), pad.top + chartH);
+        ctx.closePath();
+        ctx.fill();
+
+        // Data points
+        rangeData.forEach(d => {
+            const x = xPos(d.date);
+            const y = yPos(d.value);
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#3b82f6';
+            ctx.fill();
+            ctx.strokeStyle = '#0a0a0f';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        });
+
+        // X-axis date labels (sparse)
+        ctx.fillStyle = '#8888a8';
+        ctx.font = '10px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        const labelInterval = Math.max(1, Math.floor(rangeDays / 6));
+        for (let i = 0; i <= rangeDays; i += labelInterval) {
+            const d = new Date(startDate);
+            d.setDate(d.getDate() + i);
+            const x = pad.left + (i / totalDays) * chartW;
+            const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            ctx.fillText(label, x, pad.top + chartH + 18);
+        }
     }
 
     // ══════════════════════════════════════════════════════════

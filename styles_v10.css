@@ -189,6 +189,11 @@ body {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
+    position: sticky;
+    top: 59px; /* just below the app header */
+    z-index: 20;
+    background: var(--bg-primary);
+    padding: 8px 0 10px;
 }
 
 .pill {
@@ -234,6 +239,58 @@ body {
     flex-direction: column;
     gap: 6px;
     padding: 8px 0;
+}
+
+/* --- Block Sections (continuous list) --- */
+.block-section {
+    margin-bottom: 8px;
+    scroll-margin-top: 120px; /* accounts for sticky header + pills */
+}
+
+.block-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-left: 4px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    margin-bottom: 6px;
+    position: sticky;
+    top: 105px; /* below app header (59px) + pill row (~46px) */
+    z-index: 10;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.block-section-name {
+    font-weight: 700;
+    font-size: 0.88rem;
+    flex: 1;
+}
+
+.block-section-now {
+    font-size: 0.65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--check-green);
+    background: rgba(34, 197, 94, 0.12);
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+}
+
+.block-section-count {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.block-section-empty {
+    padding: 10px 16px;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-style: italic;
 }
 
 .checklist-item {
@@ -1512,6 +1569,224 @@ body {
 /* ===== Scrollbar / Tap ===== */
 ::-webkit-scrollbar { width: 0; }
 * { -webkit-tap-highlight-color: transparent; }
+
+/* ===== MEASUREMENT MODAL ===== */
+.measurement-dialog {
+    text-align: center;
+}
+.measurement-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+.measurement-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+}
+.measurement-input-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.measurement-input {
+    background: var(--bg-input);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    font-weight: 700;
+    padding: 10px 14px;
+    width: 120px;
+    text-align: center;
+    font-family: inherit;
+    transition: border-color var(--transition);
+}
+.measurement-input:focus {
+    outline: none;
+    border-color: var(--accent-workday);
+}
+.measurement-unit {
+    color: var(--text-secondary);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* ===== EDIT: MEASUREMENT CONFIG ===== */
+.edit-task-row-measure {
+    margin-top: 6px;
+}
+.measure-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.measure-toggle-label input[type="checkbox"] {
+    accent-color: var(--accent-workday);
+}
+.measure-fields {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+}
+.measure-fields.hidden { display: none; }
+.measure-unit-input, .measure-goal-input {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: 4px 8px;
+    font-size: 0.82rem;
+    font-family: inherit;
+    width: 90px;
+}
+.measure-goal-input { width: 70px; }
+
+/* ===== TODAY: MEASUREMENT BADGES ===== */
+.task-measure-badge {
+    font-size: 0.8rem;
+    margin-right: 4px;
+}
+.task-measure-value {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--accent-workday);
+    font-weight: 600;
+    margin-top: 2px;
+}
+
+/* ===== TRACK VIEW ===== */
+.track-header { padding: 20px 0 8px; }
+.track-header h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+.track-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-top: 4px;
+}
+.track-content { padding-bottom: 20px; }
+
+.track-card {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    border-left: 4px solid var(--border);
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+}
+
+.track-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+.track-task-name {
+    font-weight: 700;
+    font-size: 1rem;
+}
+.track-task-unit {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-left: 6px;
+}
+.track-latest {
+    text-align: right;
+}
+.track-latest-value {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--accent-workday);
+}
+.track-latest-unit {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+.track-no-data {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.track-range-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+.track-range-btn {
+    flex: 1;
+    padding: 6px 0;
+    border-radius: var(--radius-pill);
+    border: 1.5px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+.track-range-btn:hover {
+    border-color: var(--border-light);
+    color: var(--text-primary);
+}
+.track-range-btn.active {
+    background: var(--accent-workday);
+    border-color: var(--accent-workday);
+    color: #fff;
+}
+
+.track-chart-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.track-nav-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition);
+    flex-shrink: 0;
+    font-family: inherit;
+}
+.track-nav-btn:hover { background: var(--bg-card-hover); }
+.track-nav-btn:disabled { opacity: 0.3; cursor: default; }
+.track-canvas-wrap {
+    flex: 1;
+    min-width: 0;
+}
+.track-canvas {
+    width: 100%;
+    height: 220px;
+    display: block;
+}
+
+.track-data-count {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin-top: 10px;
+}
 
 /* ===== Responsive ===== */
 @media (min-width: 600px) {
