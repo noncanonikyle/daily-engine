@@ -26,71 +26,57 @@
     // ── Default Data ──────────────────────────────────────────
     function getDefaultSchedule() {
         const weekdayMorning = [
-            'Wake up & stretch',
-            'Meditate / quiet time',
-            'Get kids dressed',
-            'Brush teeth (kids + you)',
-            'Sunscreen on kids',
-            'Prepare water bottles',
+            'Wake up & hydrate',
+            'Stretch or exercise',
+            'Shower & get ready',
             'Healthy breakfast',
-            'Pack bags / lunches',
-            'Out the door on time'
+            'Review calendar & plan day',
+            'Commute / start work'
         ];
 
         const weekdayWork = [
-            'Review emails & messages',
+            'Check emails & messages',
             'Plan top 3 priorities',
             'Deep work block (2 hrs)',
-            'Team standup / check-in',
-            'Lunch break (step away)',
+            'Team check-in / meetings',
+            'Lunch break (step away!)',
             'Afternoon focus block',
             'Wrap up & prep for tomorrow'
         ];
 
         const weekdayEvening = [
-            'Pick up / greet kids',
-            'Snack & unwind time',
-            'Cook dinner',
-            'Family dinner together',
-            'Kids bath time',
-            'Brush teeth & floss (kids)',
-            'PJs & bedtime routine',
-            'Story time / lights out',
+            'Commute / transition home',
+            'Cook or prep dinner',
+            'Dinner',
             'Clean up kitchen',
-            'Personal wind-down',
+            'Personal time / hobbies',
             'Plan tomorrow',
-            'Lights out for you'
+            'Wind down (read, relax)',
+            'Lights out'
         ];
 
         const weekendMorning = [
-            'Sleep in (a little!)',
-            'Get kids dressed',
-            'Brush teeth (kids + you)',
-            'Sunscreen if going out',
-            'Prepare water bottles',
-            'Breakfast together'
+            'Sleep in a bit',
+            'Morning routine',
+            'Breakfast',
+            'Exercise or outdoor time'
         ];
 
         const weekendFree = [
-            'Family activity / outing',
-            'Grocery run / errands',
-            'House chores',
-            'Personal project time',
-            'Exercise / outdoor time',
+            'Errands / groceries',
+            'House chores & tidying',
+            'Hobby or project time',
+            'Social plans / outing',
             'Lunch'
         ];
 
         const weekendEvening = [
-            'Cook dinner',
-            'Family dinner',
-            'Kids bath time',
-            'Brush teeth & floss (kids)',
-            'PJs & bedtime routine',
-            'Story time / lights out',
+            'Cook or order dinner',
+            'Dinner',
+            'Relax / personal time',
             'Meal prep for the week',
             'Plan the week ahead',
-            'Relax / personal time',
-            'Lights out'
+            'Wind down & lights out'
         ];
 
         const schedule = {};
@@ -1248,30 +1234,8 @@
         detailEl.innerHTML = html;
     }
 
-    // ── Daily Reset ───────────────────────────────────────────
-    function cleanupOldCompletions() {
-        const keep = 90; // keep 90 days of data
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - keep);
-        const cutoffStr = cutoff.getFullYear() + '-' +
-            String(cutoff.getMonth() + 1).padStart(2, '0') + '-' +
-            String(cutoff.getDate()).padStart(2, '0');
-
-        for (const key of Object.keys(state.completions)) {
-            if (key < cutoffStr) delete state.completions[key];
-        }
-        for (const key of Object.keys(state.history)) {
-            if (key < cutoffStr) delete state.history[key];
-        }
-        for (const key of Object.keys(state.todos)) {
-            if (key < cutoffStr) delete state.todos[key];
-        }
-        saveState();
-    }
-
     // ── Boot ──────────────────────────────────────────────────
     function init() {
-        cleanupOldCompletions();
         rollForwardTodos();
         switchView('today');
 

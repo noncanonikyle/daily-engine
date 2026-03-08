@@ -2,7 +2,7 @@
    DAILY ENGINE — Service Worker (Offline PWA)
    ============================================ */
 
-const CACHE_NAME = 'daily-engine-v5';
+const CACHE_NAME = 'daily-engine-v6';
 const ASSETS = [
     './',
     './index.html',
