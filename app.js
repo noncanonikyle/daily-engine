@@ -149,6 +149,7 @@
         if (!parsed.history) parsed.history = {};
         if (!parsed.archive) parsed.archive = {};
         if (!parsed.todos) parsed.todos = {};
+        if (typeof parsed.bestStreak !== 'number') parsed.bestStreak = 0;
         return parsed;
     }
 
@@ -159,7 +160,8 @@
             completions: {},
             history: {},
             archive: {},
-            todos: {}
+            todos: {},
+            bestStreak: 0
         };
     }
 
@@ -359,11 +361,7 @@
                 try {
                     const imported = JSON.parse(ev.target.result);
                     if (imported.schedule && imported.timeBlocks) {
-                        state = imported;
-                        if (!state.archive) state.archive = {};
-                        if (!state.completions) state.completions = {};
-                        if (!state.history) state.history = {};
-                        if (!state.todos) state.todos = {};
+                        state = ensureStateFields(imported);
                         saveState();
                         switchView(currentView); // refresh
                         alert('✅ Backup restored successfully!');
@@ -457,6 +455,29 @@
         saveState();
     }
 
+    // ── Recurrence helper ────────────────────────────────────
+    function isTaskDueToday(task, dateStr) {
+        if (!task.recurrence) return true; // non-recurring always shows
+        const r = task.recurrence;
+        const start = new Date(r.startDate + 'T12:00:00');
+        const check = new Date(dateStr + 'T12:00:00');
+        if (check < start) return false; // before start date
+        const diffMs = check - start;
+        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        if (r.unit === 'weeks') {
+            const intervalDays = r.every * 7;
+            return diffDays % intervalDays === 0;
+        } else if (r.unit === 'months') {
+            // Check if same day-of-month and correct month interval
+            const startDay = start.getDate();
+            const checkDay = check.getDate();
+            if (startDay !== checkDay) return false;
+            const monthDiff = (check.getFullYear() - start.getFullYear()) * 12 + (check.getMonth() - start.getMonth());
+            return monthDiff >= 0 && monthDiff % r.every === 0;
+        }
+        return true;
+    }
+
     function setCompletion(dateStr, block, index, value) {
         const comps = getCompletions(dateStr, block);
         while (comps.length <= index) comps.push(false);
@@ -473,8 +494,9 @@
         for (const block of blocks) {
             const tasks = (state.schedule[dayName] && state.schedule[dayName][block]) || [];
             const comps = getCompletions(dateStr, block);
-            total += tasks.length;
             for (let i = 0; i < tasks.length; i++) {
+                if (!isTaskDueToday(tasks[i], dateStr)) continue;
+                total++;
                 if (comps[i]) completed++;
             }
         }
@@ -485,6 +507,63 @@
             if (t.done) completed++;
         }
         state.history[dateStr] = { completed, total };
+    }
+
+    // ── Streak computation ───────────────────────────────────
+    function computeStreaks() {
+        let current = 0;
+        const today = new Date();
+        for (let i = 0; i < 3650; i++) { // up to 10 years back
+            const d = new Date(today);
+            d.setDate(d.getDate() - i);
+            const ds = d.getFullYear() + '-' +
+                String(d.getMonth() + 1).padStart(2, '0') + '-' +
+                String(d.getDate()).padStart(2, '0');
+            const h = state.history[ds];
+            if (i === 0) {
+                // Today: count if any completion at all
+                if (h && h.completed > 0) current++;
+                else break;
+            } else {
+                // Past days: need >=50% to count
+                if (h && h.total > 0 && h.completed / h.total >= 0.5) current++;
+                else break;
+            }
+        }
+        // Update best streak if current exceeds it
+        if (current > state.bestStreak) {
+            state.bestStreak = current;
+            saveState();
+        }
+        return { current, best: state.bestStreak };
+    }
+
+    // ── Per-task streak (for calendar detail) ────────────────
+    function computeTaskStreak(dayName, block, taskIndex) {
+        // Walk backwards through dates that share this dayName
+        let streak = 0;
+        const today = new Date();
+        const targetDayNum = DAYS.indexOf(dayName);
+        // Find the most recent occurrence of this day (today or earlier)
+        const d = new Date(today);
+        while (d.getDay() !== targetDayNum) {
+            d.setDate(d.getDate() - 1);
+        }
+        for (let i = 0; i < 52; i++) { // up to 52 weeks back
+            const ds = d.getFullYear() + '-' +
+                String(d.getMonth() + 1).padStart(2, '0') + '-' +
+                String(d.getDate()).padStart(2, '0');
+            // Only count if this date isn't in the future
+            if (d > today) { d.setDate(d.getDate() - 7); continue; }
+            const comps = getCompletions(ds, block);
+            if (comps[taskIndex]) {
+                streak++;
+            } else {
+                break;
+            }
+            d.setDate(d.getDate() - 7); // go back one week
+        }
+        return streak;
     }
 
     // ── Navigation ────────────────────────────────────────────
@@ -533,6 +612,24 @@
             weekday: 'long', month: 'long', day: 'numeric'
         });
 
+        // Streak badge
+        const streaks = computeStreaks();
+        let streakEl = document.getElementById('streak-badge');
+        if (!streakEl) {
+            streakEl = document.createElement('div');
+            streakEl.id = 'streak-badge';
+            streakEl.className = 'streak-badge';
+            dateEl.parentNode.insertBefore(streakEl, dateEl.nextSibling);
+        }
+        if (streaks.current > 0) {
+            streakEl.innerHTML = `<span class="streak-fire">🔥</span> <span class="streak-count">${streaks.current}-day streak</span>` +
+                (streaks.best > streaks.current ? ` <span class="streak-best">· Best: ${streaks.best}</span>` : ` <span class="streak-best">· Personal best!</span>`);
+            streakEl.classList.remove('hidden');
+        } else {
+            streakEl.innerHTML = `<span class="streak-dimmed">Start a streak today!</span>`;
+            streakEl.classList.remove('hidden');
+        }
+
         // Time block pills
         const pillRow = document.getElementById('time-block-pills');
         pillRow.innerHTML = '';
@@ -557,51 +654,46 @@
         const tasks = (state.schedule[dayName] && state.schedule[dayName][selectedBlock]) || [];
         const comps = getCompletions(dateStr, selectedBlock);
 
-        if (tasks.length === 0) {
+        // Filter tasks by recurrence (keep original index for completions)
+        const visibleTasks = tasks.map((task, i) => ({ task, i })).filter(({ task }) => isTaskDueToday(task, dateStr));
+
+        if (visibleTasks.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-icon">📝</div>
-                    <p>No tasks for this block yet.<br>Tap + below to add some!</p>
+                    <p>No tasks for this block today.<br>Tap + below to add some!</p>
                 </div>
             `;
         } else {
-            tasks.forEach((task, i) => {
+            visibleTasks.forEach(({ task, i }) => {
                 const checked = !!comps[i];
                 const item = document.createElement('div');
                 item.className = 'checklist-item' + (checked ? ' checked' : '');
                 item.dataset.block = selectedBlock;
+                // Build time/duration meta
+                let metaHtml = '';
+                if (task.time || task.duration) {
+                    const parts = [];
+                    if (task.time) parts.push(task.time);
+                    if (task.duration) parts.push(task.duration);
+                    metaHtml = `<span class="task-meta">${escapeHtml(parts.join(' · '))}</span>`;
+                }
+                // Build recurrence indicator
+                const recurHtml = task.recurrence ? `<span class="task-recur-badge" title="Recurring">🔁</span>` : '';
                 item.innerHTML = `
                     <div class="custom-checkbox">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="20 6 9 17 4 12"/>
                         </svg>
                     </div>
-                    <span class="task-text">${escapeHtml(task.text)}</span>
-                    <button class="btn-inline-delete" aria-label="Delete task">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                        </svg>
-                    </button>
+                    <div class="task-content">
+                        <span class="task-text">${recurHtml}${escapeHtml(task.text)}</span>
+                        ${metaHtml}
+                    </div>
                 `;
-                // Check/uncheck on tap (but not if delete button was tapped)
-                item.addEventListener('click', (e) => {
-                    if (e.target.closest('.btn-inline-delete')) return;
+                // Check/uncheck on tap
+                item.addEventListener('click', () => {
                     setCompletion(dateStr, selectedBlock, i, !checked);
-                    renderToday();
-                });
-                // Delete task (with confirmation + archive)
-                item.querySelector('.btn-inline-delete').addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    const confirmed = await showConfirm(`Remove "${task.text}" from your routine?`);
-                    if (!confirmed) return;
-                    // Archive it first
-                    archiveTask(dayName, selectedBlock, task);
-                    tasks.splice(i, 1);
-                    // Also remove the completion entry for this index
-                    const c = getCompletions(dateStr, selectedBlock);
-                    c.splice(i, 1);
-                    updateHistory(dateStr);
-                    saveState();
                     renderToday();
                 });
                 container.appendChild(item);
@@ -787,16 +879,17 @@
         let totalTasks = 0;
         for (const block of blocks) {
             const bTasks = (state.schedule[dayName] && state.schedule[dayName][block]) || [];
+            const bComps = getCompletions(dateStr, block);
+            for (let i = 0; i < bTasks.length; i++) {
+                if (!isTaskDueToday(bTasks[i], dateStr)) continue;
+                totalTasks++;
+                if (bComps[i]) totalDone++;
+            }
+        }
         // Include to-dos
         totalTasks += todos.length;
         for (const t of todos) {
             if (t.done) totalDone++;
-        }
-        const pct = totalTasks > 0 ? Math.round((totalDone / totalTasks) * 100) : 0;
-            totalTasks += bTasks.length;
-            for (let i = 0; i < bTasks.length; i++) {
-                if (bComps[i]) totalDone++;
-            }
         }
         const pct = totalTasks > 0 ? Math.round((totalDone / totalTasks) * 100) : 0;
         document.getElementById('progress-fill').style.width = pct + '%';
@@ -922,21 +1015,105 @@
             item.className = 'edit-task-item';
             item.draggable = true;
             item.dataset.index = i;
+
+            // Recurrence summary text
+            let recurText = '';
+            if (task.recurrence) {
+                const r = task.recurrence;
+                recurText = `Every ${r.every} ${r.unit}${r.every > 1 ? '' : r.unit === 'weeks' ? '' : ''}`;
+            }
+
             item.innerHTML = `
                 <span class="drag-handle">⠿</span>
-                <input type="text" value="${escapeAttr(task.text)}" placeholder="Task name...">
-                <button class="btn-delete-task" aria-label="Delete task">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                </button>
+                <div class="edit-task-fields">
+                    <div class="edit-task-row-main">
+                        <input type="text" class="edit-task-name" value="${escapeAttr(task.text)}" placeholder="Task name...">
+                        <button class="btn-delete-task" aria-label="Delete task">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="edit-task-row-meta">
+                        <input type="text" class="edit-task-time" value="${escapeAttr(task.time || '')}" placeholder="⏰ Time (e.g. 9:00 AM)">
+                        <input type="text" class="edit-task-duration" value="${escapeAttr(task.duration || '')}" placeholder="⏱ Duration (e.g. 15 min)">
+                    </div>
+                    <div class="edit-task-row-recur">
+                        <label class="recur-toggle-label">
+                            <input type="checkbox" class="recur-checkbox" ${task.recurrence ? 'checked' : ''}>
+                            <span>🔁 Recurring</span>
+                        </label>
+                        <div class="recur-fields ${task.recurrence ? '' : 'hidden'}">
+                            <span>Every</span>
+                            <input type="number" class="recur-every" min="1" max="52" value="${task.recurrence ? task.recurrence.every : 1}">
+                            <select class="recur-unit">
+                                <option value="weeks" ${(!task.recurrence || task.recurrence.unit === 'weeks') ? 'selected' : ''}>weeks</option>
+                                <option value="months" ${(task.recurrence && task.recurrence.unit === 'months') ? 'selected' : ''}>months</option>
+                            </select>
+                            <span>from</span>
+                            <input type="date" class="recur-start" value="${task.recurrence ? task.recurrence.startDate : todayStr()}">
+                        </div>
+                    </div>
+                </div>
             `;
 
             // Edit task text
-            const input = item.querySelector('input');
-            input.addEventListener('input', () => {
-                tasks[i].text = input.value;
+            const nameInput = item.querySelector('.edit-task-name');
+            nameInput.addEventListener('input', () => {
+                tasks[i].text = nameInput.value;
                 saveState();
+            });
+
+            // Edit time
+            const timeInput = item.querySelector('.edit-task-time');
+            timeInput.addEventListener('input', () => {
+                tasks[i].time = timeInput.value.trim() || undefined;
+                saveState();
+            });
+
+            // Edit duration
+            const durInput = item.querySelector('.edit-task-duration');
+            durInput.addEventListener('input', () => {
+                tasks[i].duration = durInput.value.trim() || undefined;
+                saveState();
+            });
+
+            // Recurrence toggle
+            const recurCheckbox = item.querySelector('.recur-checkbox');
+            const recurFields = item.querySelector('.recur-fields');
+            recurCheckbox.addEventListener('change', () => {
+                if (recurCheckbox.checked) {
+                    recurFields.classList.remove('hidden');
+                    tasks[i].recurrence = {
+                        every: parseInt(item.querySelector('.recur-every').value) || 1,
+                        unit: item.querySelector('.recur-unit').value,
+                        startDate: item.querySelector('.recur-start').value || todayStr()
+                    };
+                } else {
+                    recurFields.classList.add('hidden');
+                    delete tasks[i].recurrence;
+                }
+                saveState();
+            });
+
+            // Recurrence detail inputs
+            item.querySelector('.recur-every').addEventListener('input', (e) => {
+                if (tasks[i].recurrence) {
+                    tasks[i].recurrence.every = parseInt(e.target.value) || 1;
+                    saveState();
+                }
+            });
+            item.querySelector('.recur-unit').addEventListener('change', (e) => {
+                if (tasks[i].recurrence) {
+                    tasks[i].recurrence.unit = e.target.value;
+                    saveState();
+                }
+            });
+            item.querySelector('.recur-start').addEventListener('change', (e) => {
+                if (tasks[i].recurrence) {
+                    tasks[i].recurrence.startDate = e.target.value;
+                    saveState();
+                }
             });
 
             // Delete (with confirmation + archive)
@@ -992,7 +1169,7 @@
             renderEditTaskList();
             // Focus the new input
             setTimeout(() => {
-                const inputs = container.querySelectorAll('input[type="text"]');
+                const inputs = container.querySelectorAll('.edit-task-name');
                 if (inputs.length > 0) inputs[inputs.length - 1].focus();
             }, 50);
         });
@@ -1059,8 +1236,9 @@
         for (const block of blocks) {
             const tasks = (state.schedule[dayName] && state.schedule[dayName][block]) || [];
             const comps = getCompletions(dateStr, block);
-            todayTotal += tasks.length;
             for (let i = 0; i < tasks.length; i++) {
+                if (!isTaskDueToday(tasks[i], dateStr)) continue;
+                todayTotal++;
                 if (comps[i]) todayDone++;
             }
         }
@@ -1071,24 +1249,9 @@
         }
         const todayPct = todayTotal > 0 ? Math.round((todayDone / todayTotal) * 100) : 0;
 
-        // Streak counter
-        let streak = 0;
-        for (let i = 0; i < 90; i++) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            const ds = d.getFullYear() + '-' +
-                String(d.getMonth() + 1).padStart(2, '0') + '-' +
-                String(d.getDate()).padStart(2, '0');
-            const h = state.history[ds];
-            if (i === 0) {
-                // Today: count if has any completion
-                if (h && h.completed > 0) streak++;
-                else break;
-            } else {
-                if (h && h.total > 0 && h.completed / h.total >= 0.5) streak++;
-                else break;
-            }
-        }
+        // Streak counter (reuse shared function)
+        const streaks = computeStreaks();
+        const streak = streaks.current;
 
         // Build month calendar
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -1134,7 +1297,7 @@
             <div class="stat-card">
                 <h3>Today's Progress</h3>
                 <div class="stat-value green">${todayPct}%</div>
-                <div class="stat-sub">${todayDone} of ${todayTotal} tasks · 🔥 ${streak}-day streak</div>
+                <div class="stat-sub">${todayDone} of ${todayTotal} tasks · 🔥 ${streak}-day streak${streaks.best > streak ? ` · Best: ${streaks.best}` : ''}</div>
             </div>
             <div class="cal-card">
                 <div class="cal-nav">
@@ -1201,12 +1364,17 @@
         for (const block of blocks) {
             const tasks = (state.schedule[dayName] && state.schedule[dayName][block]) || [];
             const comps = getCompletions(dateStr, block);
-            if (tasks.length === 0) continue;
+            // Filter to tasks due on this date
+            const dueTasks = tasks.map((task, i) => ({ task, i })).filter(({ task }) => isTaskDueToday(task, dateStr));
+            if (dueTasks.length === 0) continue;
 
             html += `<div class="cal-detail-block"><h4>${BLOCK_LABELS[block]}</h4><ul class="cal-detail-list">`;
-            tasks.forEach((task, i) => {
+            dueTasks.forEach(({ task, i }) => {
                 const done = !!comps[i];
-                html += `<li class="${done ? 'done' : 'missed'}">${done ? '✅' : '⬜'} ${escapeHtml(task.text)}</li>`;
+                const tStreak = computeTaskStreak(dayName, block, i);
+                const streakBadge = tStreak >= 2 ? ` <span class="task-streak-badge">🔥${tStreak}</span>` : '';
+                const recurIcon = task.recurrence ? '🔁 ' : '';
+                html += `<li class="${done ? 'done' : 'missed'}">${done ? '✅' : '⬜'} ${recurIcon}${escapeHtml(task.text)}${done ? streakBadge : ''}</li>`;
             });
             html += `</ul></div>`;
         }

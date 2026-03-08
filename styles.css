@@ -533,7 +533,7 @@ body {
     -webkit-user-select: none;
 }
 
-.edit-task-item input[type="text"] {
+.edit-task-item .edit-task-name {
     flex: 1;
     background: transparent;
     border: none;
@@ -544,7 +544,7 @@ body {
     font-family: inherit;
 }
 
-.edit-task-item input[type="text"]::placeholder {
+.edit-task-item .edit-task-name::placeholder {
     color: var(--text-muted);
 }
 
@@ -1292,4 +1292,222 @@ body {
     #app-main {
         padding: 0 24px 100px;
     }
+}
+
+/* ===== STREAK BADGE (Today View) ===== */
+.streak-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0 10px;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+}
+
+.streak-fire {
+    font-size: 1.1rem;
+}
+
+.streak-count {
+    font-weight: 700;
+    color: var(--accent-morning);
+}
+
+.streak-best {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.streak-dimmed {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+/* ===== TASK CONTENT WRAPPER (Today View) ===== */
+.task-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.task-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.task-recur-badge {
+    font-size: 0.8rem;
+    margin-right: 4px;
+}
+
+/* ===== TASK STREAK BADGE (Calendar Detail) ===== */
+.task-streak-badge {
+    font-size: 0.75rem;
+    color: var(--accent-morning);
+    font-weight: 700;
+    margin-left: 6px;
+}
+
+/* ===== EDIT TASK EXPANDED FIELDS ===== */
+.edit-task-fields {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.edit-task-row-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.edit-task-row-main .edit-task-name {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    font-weight: 500;
+    outline: none;
+    font-family: inherit;
+}
+
+.edit-task-row-main .edit-task-name::placeholder {
+    color: var(--text-muted);
+}
+
+.edit-task-row-meta {
+    display: flex;
+    gap: 6px;
+}
+
+.edit-task-time,
+.edit-task-duration {
+    flex: 1;
+    padding: 5px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color var(--transition);
+}
+
+.edit-task-time:focus,
+.edit-task-duration:focus {
+    border-color: var(--accent-workday);
+    color: var(--text-primary);
+}
+
+.edit-task-time::placeholder,
+.edit-task-duration::placeholder {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+/* ===== RECURRENCE CONTROLS ===== */
+.edit-task-row-recur {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.recur-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.recur-toggle-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-workday);
+    cursor: pointer;
+}
+
+.recur-toggle-label span {
+    font-weight: 600;
+}
+
+.recur-fields {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.recur-fields span {
+    color: var(--text-muted);
+}
+
+.recur-every {
+    width: 48px;
+    padding: 4px 6px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    font-family: inherit;
+    outline: none;
+    text-align: center;
+}
+
+.recur-every:focus {
+    border-color: var(--accent-workday);
+}
+
+.recur-unit {
+    padding: 4px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    font-family: inherit;
+    outline: none;
+    cursor: pointer;
+}
+
+.recur-unit:focus {
+    border-color: var(--accent-workday);
+}
+
+.recur-start {
+    padding: 4px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.75rem;
+    font-family: inherit;
+    outline: none;
+}
+
+.recur-start:focus {
+    border-color: var(--accent-workday);
+}
+
+/* Fix edit task item for new structure */
+.edit-task-item {
+    align-items: flex-start;
+    padding: 12px 12px;
+}
+
+.edit-task-item .drag-handle {
+    margin-top: 3px;
 }
