@@ -23,6 +23,7 @@
     --accent-evening: #8b5cf6;
     --accent-free: #10b981;
     --accent-danger: #ef4444;
+    --accent-todo: #ec4899;
     --border: #2a2a3e;
     --border-light: #33334a;
     --check-green: #22c55e;
@@ -991,6 +992,299 @@ body {
 
 .backup-hint strong {
     color: var(--accent-free);
+}
+
+/* ===== TO-DO SECTION ===== */
+.todo-section {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--border);
+}
+
+.todo-header h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+}
+
+.todo-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.todo-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent-todo);
+    cursor: pointer;
+    transition: all var(--transition);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.todo-item:hover {
+    background: var(--bg-card-hover);
+}
+
+.todo-item:active {
+    transform: scale(0.98);
+}
+
+.todo-item.checked {
+    opacity: 0.5;
+}
+
+.todo-item.checked .task-text {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+.todo-item .todo-checkbox {
+    border-color: var(--accent-todo);
+}
+
+.todo-item.checked .todo-checkbox {
+    background: var(--accent-todo);
+    border-color: var(--accent-todo);
+}
+
+.btn-quick-add-todo {
+    border-color: var(--accent-todo);
+    color: var(--accent-todo);
+}
+
+.btn-quick-add-todo:hover,
+.btn-quick-add-todo:active {
+    border-color: var(--accent-todo) !important;
+    color: var(--accent-todo) !important;
+    background: rgba(236, 72, 153, 0.05) !important;
+}
+
+.btn-todo-confirm {
+    background: var(--accent-todo) !important;
+    color: #fff !important;
+}
+
+.btn-todo-confirm:hover,
+.btn-todo-confirm:active {
+    background: #db2777 !important;
+}
+
+/* ===== CALENDAR VIEW ===== */
+.cal-card {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding: 16px;
+}
+
+.cal-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.cal-month-label {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.cal-nav-btn {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition);
+}
+
+.cal-nav-btn:hover,
+.cal-nav-btn:active {
+    background: var(--bg-card-hover);
+    border-color: var(--border-light);
+}
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.cal-header-cell {
+    text-align: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    padding: 4px 0 8px;
+    text-transform: uppercase;
+}
+
+.cal-cell {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border: 1.5px solid transparent;
+    position: relative;
+}
+
+.cal-cell.empty {
+    background: transparent;
+    cursor: default;
+}
+
+.cal-cell.cal-future {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.cal-cell.cal-today {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+    font-weight: 800;
+}
+
+.cal-cell.cal-selected {
+    border-color: var(--accent-workday);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+/* Color-coded completion dots */
+.cal-cell.cal-perfect {
+    background: var(--check-green);
+    color: #000;
+    font-weight: 800;
+}
+
+.cal-cell.cal-good {
+    background: rgba(34, 197, 94, 0.35);
+    color: var(--check-green);
+    font-weight: 700;
+}
+
+.cal-cell.cal-partial {
+    background: rgba(245, 158, 11, 0.25);
+    color: var(--accent-morning);
+    font-weight: 700;
+}
+
+.cal-cell.cal-none {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--accent-danger);
+}
+
+.cal-cell:active:not(.empty):not(.cal-future) {
+    transform: scale(0.9);
+}
+
+.cal-legend {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.cal-leg {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.cal-leg-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+}
+
+.cal-leg-dot.cal-perfect { background: var(--check-green); }
+.cal-leg-dot.cal-good { background: rgba(34, 197, 94, 0.35); }
+.cal-leg-dot.cal-partial { background: rgba(245, 158, 11, 0.25); }
+.cal-leg-dot.cal-none { background: rgba(239, 68, 68, 0.15); }
+
+/* Calendar date detail */
+.cal-detail-card {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding: 20px;
+    margin-top: 12px;
+    animation: fadeIn 0.25s ease;
+}
+
+.cal-detail-card > h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 14px;
+    color: var(--text-primary);
+}
+
+.cal-detail-block {
+    margin-bottom: 12px;
+}
+
+.cal-detail-block h4 {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+}
+
+.cal-detail-list {
+    list-style: none;
+    padding: 0;
+}
+
+.cal-detail-list li {
+    font-size: 0.88rem;
+    padding: 4px 0;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.cal-detail-list li.done {
+    color: var(--text-muted);
+}
+
+.cal-detail-list li.missed {
+    color: var(--text-secondary);
+}
+
+.cal-detail-summary {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: center;
 }
 
 /* ===== Responsive ===== */

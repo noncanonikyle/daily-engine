@@ -162,6 +162,7 @@
         if (!parsed.completions) parsed.completions = {};
         if (!parsed.history) parsed.history = {};
         if (!parsed.archive) parsed.archive = {};
+        if (!parsed.todos) parsed.todos = {};
         return parsed;
     }
 
@@ -171,7 +172,8 @@
             timeBlocks: getDefaultTimeBlocks(),
             completions: {},
             history: {},
-            archive: {}
+            archive: {},
+            todos: {}
         };
     }
 
@@ -207,11 +209,12 @@
     }
 
     function generateBackupUrl() {
-        // Strip completions/history to keep URL shorter — only schedule, timeBlocks, archive
+        // Strip completions/history to keep URL shorter — only schedule, timeBlocks, archive, todos
         const exportData = {
             schedule: state.schedule,
             timeBlocks: state.timeBlocks,
-            archive: state.archive
+            archive: state.archive,
+            todos: state.todos
         };
         const json = JSON.stringify(exportData);
         const encoded = btoa(encodeURIComponent(json));
@@ -374,6 +377,7 @@
                         if (!state.archive) state.archive = {};
                         if (!state.completions) state.completions = {};
                         if (!state.history) state.history = {};
+                        if (!state.todos) state.todos = {};
                         saveState();
                         switchView(currentView); // refresh
                         alert('✅ Backup restored successfully!');
@@ -427,11 +431,44 @@
         }
         return blocks[0]; // fallback
     }
-
     function getCompletions(dateStr, block) {
         if (!state.completions[dateStr]) state.completions[dateStr] = {};
         if (!state.completions[dateStr][block]) state.completions[dateStr][block] = [];
         return state.completions[dateStr][block];
+    }
+
+    // ── To-Do helpers ────────────────────────────────────────
+    function getTodos(dateStr) {
+        if (!state.todos[dateStr]) state.todos[dateStr] = [];
+        return state.todos[dateStr];
+    }
+
+    function rollForwardTodos() {
+        const today = todayStr();
+        // Find all previous dates that have todos
+        const dates = Object.keys(state.todos).filter(d => d < today).sort().reverse();
+        if (dates.length === 0) return;
+
+        const todayTodos = getTodos(today);
+        for (const prevDate of dates) {
+            const prev = state.todos[prevDate];
+            if (!prev || prev.length === 0) continue;
+            // Move incomplete todos forward
+            const incomplete = prev.filter(t => !t.done);
+            if (incomplete.length > 0) {
+                for (const t of incomplete) {
+                    // Avoid duplicates (already rolled or manually added)
+                    const exists = todayTodos.some(existing => existing.text === t.text);
+                    if (!exists) {
+                        todayTodos.push({ text: t.text, done: false });
+                    }
+                }
+                // Remove the rolled-forward items from the old date (keep done ones)
+                state.todos[prevDate] = prev.filter(t => t.done);
+                if (state.todos[prevDate].length === 0) delete state.todos[prevDate];
+            }
+        }
+        saveState();
     }
 
     function setCompletion(dateStr, block, index, value) {
@@ -454,6 +491,12 @@
             for (let i = 0; i < tasks.length; i++) {
                 if (comps[i]) completed++;
             }
+        }
+        // Include to-dos in history
+        const todos = getTodos(dateStr);
+        total += todos.length;
+        for (const t of todos) {
+            if (t.done) completed++;
         }
         state.history[dateStr] = { completed, total };
     }
@@ -661,12 +704,109 @@
             });
         }
 
-        // Progress bar (across ALL blocks for today)
+        // ── To-Do Section ──────────────────────────────────────
+        const todoContainer = document.getElementById('today-todos');
+        todoContainer.innerHTML = '';
+
+        const todos = getTodos(dateStr);
+
+        const todoHeader = document.createElement('div');
+        todoHeader.className = 'todo-header';
+        todoHeader.innerHTML = `<h3>📝 Today's To-Dos</h3>`;
+        todoContainer.appendChild(todoHeader);
+
+        if (todos.length > 0) {
+            const todoList = document.createElement('div');
+            todoList.className = 'todo-list';
+            todos.forEach((todo, i) => {
+                const item = document.createElement('div');
+                item.className = 'todo-item' + (todo.done ? ' checked' : '');
+                item.innerHTML = `
+                    <div class="custom-checkbox todo-checkbox">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    </div>
+                    <span class="task-text">${escapeHtml(todo.text)}</span>
+                    <button class="btn-inline-delete" aria-label="Delete to-do">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                `;
+                item.addEventListener('click', (e) => {
+                    if (e.target.closest('.btn-inline-delete')) return;
+                    todos[i].done = !todos[i].done;
+                    updateHistory(dateStr);
+                    saveState();
+                    renderToday();
+                });
+                item.querySelector('.btn-inline-delete').addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const confirmed = await showConfirm(`Remove "${todo.text}" from your to-dos?`);
+                    if (!confirmed) return;
+                    todos.splice(i, 1);
+                    updateHistory(dateStr);
+                    saveState();
+                    renderToday();
+                });
+                todoList.appendChild(item);
+            });
+            todoContainer.appendChild(todoList);
+        }
+
+        // Quick-add to-do
+        const todoAdd = document.createElement('div');
+        todoAdd.className = 'quick-add-container';
+        todoAdd.innerHTML = `
+            <button class="btn-quick-add btn-quick-add-todo" id="btn-todo-add-toggle">+ Add To-Do</button>
+            <div class="quick-add-input-row hidden" id="todo-add-row">
+                <input type="text" id="todo-add-input" class="quick-add-input" placeholder="What else needs doing today?" autocomplete="off">
+                <button class="btn-quick-add-confirm btn-todo-confirm" id="btn-todo-add-confirm">Add</button>
+            </div>
+        `;
+        todoContainer.appendChild(todoAdd);
+
+        const todoToggleBtn = todoAdd.querySelector('#btn-todo-add-toggle');
+        const todoInputRow = todoAdd.querySelector('#todo-add-row');
+        const todoInput = todoAdd.querySelector('#todo-add-input');
+        const todoConfirmBtn = todoAdd.querySelector('#btn-todo-add-confirm');
+
+        todoToggleBtn.addEventListener('click', () => {
+            todoToggleBtn.classList.add('hidden');
+            todoInputRow.classList.remove('hidden');
+            todoInput.focus();
+        });
+
+        function addTodo() {
+            const text = todoInput.value.trim();
+            if (!text) return;
+            todos.push({ text, done: false });
+            updateHistory(dateStr);
+            saveState();
+            renderToday();
+        }
+
+        todoConfirmBtn.addEventListener('click', addTodo);
+        todoInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') addTodo();
+            if (e.key === 'Escape') {
+                todoToggleBtn.classList.remove('hidden');
+                todoInputRow.classList.add('hidden');
+            }
+        });
+
+        // Progress bar (across ALL blocks for today + to-dos)
         let totalDone = 0;
         let totalTasks = 0;
         for (const block of blocks) {
             const bTasks = (state.schedule[dayName] && state.schedule[dayName][block]) || [];
-            const bComps = getCompletions(dateStr, block);
+        // Include to-dos
+        totalTasks += todos.length;
+        for (const t of todos) {
+            if (t.done) totalDone++;
+        }
+        const pct = totalTasks > 0 ? Math.round((totalDone / totalTasks) * 100) : 0;
             totalTasks += bTasks.length;
             for (let i = 0; i < bTasks.length; i++) {
                 if (bComps[i]) totalDone++;
@@ -914,7 +1054,11 @@
         return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    // ── STATS VIEW ────────────────────────────────────────────
+    // ── CALENDAR VIEW ───────────────────────────────────────
+    let calYear = new Date().getFullYear();
+    let calMonth = new Date().getMonth(); // 0-indexed
+    let calSelectedDate = null;
+
     function renderStats() {
         const container = document.getElementById('stats-content');
         container.innerHTML = '';
@@ -923,7 +1067,7 @@
         const dayName = todayDayName();
         const blocks = getBlocksForDay(dayName);
 
-        // Today's stats
+        // Today's summary card
         let todayDone = 0;
         let todayTotal = 0;
         for (const block of blocks) {
@@ -934,66 +1078,179 @@
                 if (comps[i]) todayDone++;
             }
         }
+        const todos = getTodos(dateStr);
+        todayTotal += todos.length;
+        for (const t of todos) {
+            if (t.done) todayDone++;
+        }
         const todayPct = todayTotal > 0 ? Math.round((todayDone / todayTotal) * 100) : 0;
 
-        // Per-block stats
-        let blockStatsHtml = '';
-        for (const block of blocks) {
-            const tasks = (state.schedule[dayName] && state.schedule[dayName][block]) || [];
-            const comps = getCompletions(dateStr, block);
-            let done = 0;
-            for (let i = 0; i < tasks.length; i++) {
-                if (comps[i]) done++;
-            }
-            const colorClass = block === 'morning' ? 'orange' : block === 'workday' ? 'blue' : block === 'evening' ? 'purple' : 'green';
-            blockStatsHtml += `
-                <div class="stat-card">
-                    <h3>${BLOCK_LABELS[block]}</h3>
-                    <div class="stat-value ${colorClass}">${done} / ${tasks.length}</div>
-                    <div class="stat-sub">${tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0}% complete</div>
-                </div>
-            `;
-        }
-
-        // 7-day streak
-        let streakHtml = '';
-        for (let i = 6; i >= 0; i--) {
+        // Streak counter
+        let streak = 0;
+        for (let i = 0; i < 90; i++) {
             const d = new Date();
             d.setDate(d.getDate() - i);
             const ds = d.getFullYear() + '-' +
                 String(d.getMonth() + 1).padStart(2, '0') + '-' +
                 String(d.getDate()).padStart(2, '0');
             const h = state.history[ds];
-            const isToday = i === 0;
-            let cls = '';
-            let label = DAY_LABELS[d.getDay()].charAt(0);
-            if (h && h.total > 0) {
-                const pct = h.completed / h.total;
-                if (pct >= 1) cls = 'completed';
-                else if (pct > 0) cls = 'partial';
+            if (i === 0) {
+                // Today: count if has any completion
+                if (h && h.completed > 0) streak++;
+                else break;
+            } else {
+                if (h && h.total > 0 && h.completed / h.total >= 0.5) streak++;
+                else break;
             }
-            if (isToday) cls += ' today';
-            streakHtml += `<div class="streak-dot ${cls}">${label}</div>`;
+        }
+
+        // Build month calendar
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
+        const firstDay = new Date(calYear, calMonth, 1).getDay();
+        const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+        const todayDate = new Date();
+        const isCurrentMonth = calYear === todayDate.getFullYear() && calMonth === todayDate.getMonth();
+
+        let calendarCells = '';
+        // Day of week headers
+        const dayHeaders = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+        for (const dh of dayHeaders) {
+            calendarCells += `<div class="cal-header-cell">${dh}</div>`;
+        }
+        // Empty cells for days before month starts
+        for (let i = 0; i < firstDay; i++) {
+            calendarCells += `<div class="cal-cell empty"></div>`;
+        }
+        // Day cells
+        for (let day = 1; day <= daysInMonth; day++) {
+            const ds = calYear + '-' +
+                String(calMonth + 1).padStart(2, '0') + '-' +
+                String(day).padStart(2, '0');
+            const h = state.history[ds];
+            const isFuture = new Date(calYear, calMonth, day) > todayDate;
+            const isToday = isCurrentMonth && day === todayDate.getDate();
+            const isSelected = ds === calSelectedDate;
+
+            let dotClass = '';
+            if (!isFuture && h && h.total > 0) {
+                const pct = h.completed / h.total;
+                if (pct >= 1) dotClass = 'cal-perfect';
+                else if (pct >= 0.5) dotClass = 'cal-good';
+                else if (pct > 0) dotClass = 'cal-partial';
+                else dotClass = 'cal-none';
+            }
+
+            calendarCells += `<div class="cal-cell ${dotClass}${isToday ? ' cal-today' : ''}${isSelected ? ' cal-selected' : ''}${isFuture ? ' cal-future' : ''}" data-date="${ds}">${day}</div>`;
         }
 
         container.innerHTML = `
             <div class="stat-card">
                 <h3>Today's Progress</h3>
                 <div class="stat-value green">${todayPct}%</div>
-                <div class="stat-sub">${todayDone} of ${todayTotal} tasks completed</div>
+                <div class="stat-sub">${todayDone} of ${todayTotal} tasks · 🔥 ${streak}-day streak</div>
             </div>
-            ${blockStatsHtml}
-            <div class="stat-card">
-                <h3>Last 7 Days</h3>
-                <div class="streak-row">${streakHtml}</div>
-                <div class="stat-sub" style="margin-top: 10px">🟢 = 100% &nbsp; 🟡 = partial &nbsp; ⬛ = no data</div>
+            <div class="cal-card">
+                <div class="cal-nav">
+                    <button class="cal-nav-btn" id="cal-prev">‹</button>
+                    <span class="cal-month-label">${monthNames[calMonth]} ${calYear}</span>
+                    <button class="cal-nav-btn" id="cal-next">›</button>
+                </div>
+                <div class="cal-grid">${calendarCells}</div>
+                <div class="cal-legend">
+                    <span class="cal-leg"><span class="cal-leg-dot cal-perfect"></span>100%</span>
+                    <span class="cal-leg"><span class="cal-leg-dot cal-good"></span>50%+</span>
+                    <span class="cal-leg"><span class="cal-leg-dot cal-partial"></span>&lt;50%</span>
+                    <span class="cal-leg"><span class="cal-leg-dot cal-none"></span>0%</span>
+                </div>
             </div>
+            <div id="cal-detail"></div>
         `;
+
+        // Month nav
+        document.getElementById('cal-prev').addEventListener('click', () => {
+            calMonth--;
+            if (calMonth < 0) { calMonth = 11; calYear--; }
+            calSelectedDate = null;
+            renderStats();
+        });
+        document.getElementById('cal-next').addEventListener('click', () => {
+            calMonth++;
+            if (calMonth > 11) { calMonth = 0; calYear++; }
+            calSelectedDate = null;
+            renderStats();
+        });
+
+        // Day click → show detail
+        container.querySelectorAll('.cal-cell[data-date]').forEach(cell => {
+            cell.addEventListener('click', () => {
+                const ds = cell.dataset.date;
+                if (new Date(ds + 'T12:00:00') > todayDate) return; // future
+                calSelectedDate = ds;
+                // Re-highlight
+                container.querySelectorAll('.cal-cell').forEach(c => c.classList.remove('cal-selected'));
+                cell.classList.add('cal-selected');
+                renderCalendarDetail(ds);
+            });
+        });
+
+        // Show detail for selected date if any
+        if (calSelectedDate) {
+            renderCalendarDetail(calSelectedDate);
+        }
+    }
+
+    function renderCalendarDetail(dateStr) {
+        const detailEl = document.getElementById('cal-detail');
+        if (!detailEl) return;
+
+        const d = new Date(dateStr + 'T12:00:00');
+        const dayName = DAYS[d.getDay()];
+        const blocks = getBlocksForDay(dayName);
+        const dateLabel = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+        let html = `<div class="cal-detail-card"><h3>📋 ${dateLabel}</h3>`;
+
+        // Routine tasks by block
+        for (const block of blocks) {
+            const tasks = (state.schedule[dayName] && state.schedule[dayName][block]) || [];
+            const comps = getCompletions(dateStr, block);
+            if (tasks.length === 0) continue;
+
+            html += `<div class="cal-detail-block"><h4>${BLOCK_LABELS[block]}</h4><ul class="cal-detail-list">`;
+            tasks.forEach((task, i) => {
+                const done = !!comps[i];
+                html += `<li class="${done ? 'done' : 'missed'}">${done ? '✅' : '⬜'} ${escapeHtml(task.text)}</li>`;
+            });
+            html += `</ul></div>`;
+        }
+
+        // To-dos for that date
+        const dateTodos = state.todos[dateStr];
+        if (dateTodos && dateTodos.length > 0) {
+            html += `<div class="cal-detail-block"><h4>📝 To-Dos</h4><ul class="cal-detail-list">`;
+            for (const t of dateTodos) {
+                html += `<li class="${t.done ? 'done' : 'missed'}">${t.done ? '✅' : '⬜'} ${escapeHtml(t.text)}</li>`;
+            }
+            html += `</ul></div>`;
+        }
+
+        // Summary
+        const h = state.history[dateStr];
+        if (h && h.total > 0) {
+            const pct = Math.round((h.completed / h.total) * 100);
+            html += `<div class="cal-detail-summary">${h.completed}/${h.total} completed (${pct}%)</div>`;
+        } else {
+            html += `<div class="cal-detail-summary">No data for this day</div>`;
+        }
+
+        html += `</div>`;
+        detailEl.innerHTML = html;
     }
 
     // ── Daily Reset ───────────────────────────────────────────
     function cleanupOldCompletions() {
-        const keep = 14; // keep 14 days of data
+        const keep = 90; // keep 90 days of data
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - keep);
         const cutoffStr = cutoff.getFullYear() + '-' +
@@ -1006,12 +1263,16 @@
         for (const key of Object.keys(state.history)) {
             if (key < cutoffStr) delete state.history[key];
         }
+        for (const key of Object.keys(state.todos)) {
+            if (key < cutoffStr) delete state.todos[key];
+        }
         saveState();
     }
 
     // ── Boot ──────────────────────────────────────────────────
     function init() {
         cleanupOldCompletions();
+        rollForwardTodos();
         switchView('today');
 
         // Update every minute to handle time block transitions
