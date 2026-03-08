@@ -1511,3 +1511,125 @@ body {
 .edit-task-item .drag-handle {
     margin-top: 3px;
 }
+
+/* ===== CLOUD SYNC INDICATOR ===== */
+.sync-indicator {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: var(--radius-pill);
+    white-space: nowrap;
+    transition: all 0.3s ease;
+}
+
+.sync-indicator.synced {
+    color: var(--check-green);
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.sync-indicator.syncing {
+    color: var(--accent-workday);
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.sync-indicator.error {
+    color: var(--accent-morning);
+    background: rgba(245, 158, 11, 0.1);
+}
+
+/* ===== RECOVERY CODE MODAL ===== */
+.recovery-dialog {
+    max-width: 360px;
+    text-align: center;
+}
+
+.recovery-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.recovery-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 16px;
+}
+
+.recovery-code-display {
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--accent-morning);
+    background: var(--bg-secondary);
+    border: 2px solid var(--accent-morning);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    user-select: all;
+    -webkit-user-select: all;
+    word-break: break-all;
+}
+
+.recovery-hint {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+}
+
+.recovery-done-btn {
+    background: var(--check-green) !important;
+    color: #000 !important;
+}
+
+.recovery-done-btn:hover {
+    background: #16a34a !important;
+}
+
+/* Recovery input */
+.recovery-code-input {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--bg-secondary);
+    border: 1.5px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-align: center;
+    outline: none;
+    transition: border-color var(--transition);
+    margin-bottom: 8px;
+}
+
+.recovery-code-input:focus {
+    border-color: var(--accent-workday);
+}
+
+.recovery-code-input::placeholder {
+    color: var(--text-muted);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+.recovery-error {
+    font-size: 0.82rem;
+    color: var(--accent-danger);
+    margin-bottom: 12px;
+    min-height: 1.2em;
+}
+
+/* Cloud backup buttons */
+.btn-recovery {
+    border-color: var(--accent-morning);
+    color: var(--accent-morning);
+}
+
+.btn-cloud {
+    border-color: var(--accent-workday);
+    color: var(--accent-workday);
+}

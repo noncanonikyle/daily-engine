@@ -12,6 +12,9 @@
     <link rel="apple-touch-icon" href="icons/icon-192.svg">
     <link rel="icon" type="image/svg+xml" href="icons/icon-192.svg">
     <link rel="stylesheet" href="styles.css">
+    <!-- Firebase SDK (CDN, compat mode for vanilla JS) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 </head>
 <body>
     <!-- ===== TOP NAV BAR ===== -->
@@ -19,6 +22,7 @@
         <div class="header-left">
             <span class="app-logo">⚡</span>
             <h1>Daily Engine</h1>
+            <span id="sync-indicator" class="sync-indicator"></span>
         </div>
         <div class="header-right">
             <button id="btn-today" class="nav-btn active" aria-label="Today view">
@@ -99,8 +103,12 @@
             </div>
             <div class="backup-section">
                 <h3>💾 Backup &amp; Restore</h3>
-                <p class="backup-subtitle">Your data auto-saves to two local backups every time you make a change. Use the buttons below for extra safety.</p>
+                <p class="backup-subtitle">Your data auto-syncs to the cloud and saves locally. Use the buttons below for extra safety.</p>
                 <div class="backup-buttons">
+                    <button id="btn-show-recovery" class="btn-backup btn-recovery">🔑 View Recovery Code</button>
+                    <button id="btn-cloud-restore" class="btn-backup btn-cloud">☁️ Restore from Cloud</button>
+                </div>
+                <div class="backup-buttons" style="margin-top: 8px;">
                     <button id="btn-export" class="btn-backup btn-export">📥 Download File</button>
                     <button id="btn-import" class="btn-backup btn-import">📤 Restore File</button>
                 </div>
@@ -108,7 +116,7 @@
                     <button id="btn-copy-clipboard" class="btn-backup btn-clipboard">📋 Copy to Clipboard</button>
                     <button id="btn-copy-link" class="btn-backup btn-link">🔗 Copy Backup Link</button>
                 </div>
-                <p class="backup-hint">💡 <strong>Backup Link</strong> is the easiest — it creates a special URL. Bookmark it or text it to yourself. Open it on any device to restore your schedule.</p>
+                <p class="backup-hint">☁️ <strong>Cloud sync is automatic.</strong> Your recovery code is all you need to restore your data on any device — even after clearing Safari.</p>
             </div>
         </section>
 

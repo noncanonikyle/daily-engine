@@ -8,6 +8,7 @@
     // ── Constants ──────────────────────────────────────────────
     const STORAGE_KEY = 'dailyEngine';
     const BACKUP_KEY = 'dailyEngine_backup';
+    const RECOVERY_CODE_KEY = 'dailyEngine_recoveryCode';
     const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
@@ -175,6 +176,297 @@
         } catch (e) {
             console.warn('Failed to save state', e);
         }
+        // Cloud sync (fire-and-forget)
+        syncToCloud();
+    }
+
+    // ── Firebase Cloud Sync ──────────────────────────────────
+    const firebaseConfig = {
+        apiKey: "AIzaSyCPgkLBUOohUkJkl8-6A5IB-FNmHZjKcts",
+        authDomain: "daily-engine.firebaseapp.com",
+        databaseURL: "https://daily-engine-default-rtdb.firebaseio.com",
+        projectId: "daily-engine",
+        storageBucket: "daily-engine.firebasestorage.app",
+        messagingSenderId: "78664979281",
+        appId: "1:78664979281:web:21dd7280ea1b863625f970"
+    };
+
+    let firebaseDb = null;
+    let cloudSyncEnabled = false;
+
+    function initFirebase() {
+        try {
+            if (typeof firebase !== 'undefined' && firebase.initializeApp) {
+                const app = firebase.initializeApp(firebaseConfig);
+                firebaseDb = firebase.database();
+                cloudSyncEnabled = true;
+                console.info('☁️ Firebase initialized');
+            } else {
+                console.warn('Firebase SDK not loaded (offline?)');
+            }
+        } catch (e) {
+            console.warn('Firebase init failed:', e);
+        }
+    }
+
+    function generateRecoveryCode() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 to avoid confusion
+        const segments = [];
+        for (let s = 0; s < 3; s++) {
+            let seg = '';
+            for (let i = 0; i < 4; i++) {
+                seg += chars[Math.floor(Math.random() * chars.length)];
+            }
+            segments.push(seg);
+        }
+        return 'ENGINE-' + segments.join('-');
+    }
+
+    function getRecoveryCode() {
+        let code = localStorage.getItem(RECOVERY_CODE_KEY);
+        if (!code) {
+            code = generateRecoveryCode();
+            localStorage.setItem(RECOVERY_CODE_KEY, code);
+        }
+        return code;
+    }
+
+    function setRecoveryCode(code) {
+        localStorage.setItem(RECOVERY_CODE_KEY, code);
+    }
+
+    let syncDebounceTimer = null;
+    function syncToCloud() {
+        if (!cloudSyncEnabled || !firebaseDb) return;
+        // Debounce: wait 2 seconds after last save before pushing
+        clearTimeout(syncDebounceTimer);
+        syncDebounceTimer = setTimeout(() => {
+            const code = getRecoveryCode();
+            const payload = JSON.parse(JSON.stringify(state));
+            payload._syncTime = new Date().toISOString();
+            firebaseDb.ref('users/' + code).set(payload).then(() => {
+                updateSyncIndicator('synced');
+                console.info('☁️ Synced to cloud');
+            }).catch((err) => {
+                updateSyncIndicator('error');
+                console.warn('☁️ Sync failed:', err);
+            });
+        }, 2000);
+    }
+
+    function restoreFromCloud(code) {
+        return new Promise((resolve, reject) => {
+            if (!cloudSyncEnabled || !firebaseDb) {
+                reject(new Error('Cloud not available'));
+                return;
+            }
+            firebaseDb.ref('users/' + code).once('value').then((snapshot) => {
+                const data = snapshot.val();
+                if (data && data.schedule && data.timeBlocks) {
+                    resolve(data);
+                } else {
+                    reject(new Error('No data found for this code'));
+                }
+            }).catch(reject);
+        });
+    }
+
+    function updateSyncIndicator(status) {
+        let indicator = document.getElementById('sync-indicator');
+        if (!indicator) return;
+        if (status === 'synced') {
+            indicator.textContent = '☁️ Synced';
+            indicator.className = 'sync-indicator synced';
+        } else if (status === 'error') {
+            indicator.textContent = '⚠️ Offline';
+            indicator.className = 'sync-indicator error';
+        } else if (status === 'syncing') {
+            indicator.textContent = '☁️ Syncing…';
+            indicator.className = 'sync-indicator syncing';
+        }
+    }
+
+    function showRecoveryCodeModal(code, isFirstTime) {
+        const overlay = document.createElement('div');
+        overlay.className = 'confirm-overlay';
+        const title = isFirstTime
+            ? '☁️ Cloud Backup Enabled!'
+            : '☁️ Your Recovery Code';
+        const subtitle = isFirstTime
+            ? 'Your data now auto-syncs to the cloud. If you ever lose your data, use this code to restore everything:'
+            : 'Use this code to restore your data on any device:';
+        overlay.innerHTML = `
+            <div class="confirm-dialog recovery-dialog">
+                <h3 class="recovery-title">${title}</h3>
+                <p class="recovery-subtitle">${subtitle}</p>
+                <div class="recovery-code-display">${code}</div>
+                <p class="recovery-hint">📸 Screenshot this or write it down!</p>
+                <div class="confirm-buttons">
+                    <button class="confirm-btn confirm-cancel" id="recovery-copy">📋 Copy Code</button>
+                    <button class="confirm-btn confirm-yes recovery-done-btn">Got It</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => overlay.classList.add('visible'));
+
+        overlay.querySelector('#recovery-copy').addEventListener('click', () => {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code).then(() => {
+                    showToast('✅ Recovery code copied!');
+                });
+            } else {
+                // Fallback
+                const ta = document.createElement('textarea');
+                ta.value = code;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                showToast('✅ Recovery code copied!');
+            }
+        });
+
+        overlay.querySelector('.recovery-done-btn').addEventListener('click', () => {
+            overlay.classList.remove('visible');
+            setTimeout(() => overlay.remove(), 200);
+        });
+    }
+
+    function showRecoveryInputModal() {
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'confirm-overlay';
+            overlay.innerHTML = `
+                <div class="confirm-dialog recovery-dialog">
+                    <h3 class="recovery-title">🔑 Restore Your Data</h3>
+                    <p class="recovery-subtitle">It looks like your local data was cleared. Enter your recovery code to restore from the cloud:</p>
+                    <input type="text" class="recovery-code-input" id="recovery-input" placeholder="ENGINE-XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">
+                    <div id="recovery-error" class="recovery-error hidden"></div>
+                    <div class="confirm-buttons">
+                        <button class="confirm-btn confirm-cancel" id="recovery-skip">Start Fresh</button>
+                        <button class="confirm-btn confirm-yes recovery-done-btn" id="recovery-restore">Restore</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            requestAnimationFrame(() => overlay.classList.add('visible'));
+
+            const input = overlay.querySelector('#recovery-input');
+            const errorEl = overlay.querySelector('#recovery-error');
+            input.focus();
+
+            // Auto-format: uppercase as they type
+            input.addEventListener('input', () => {
+                input.value = input.value.toUpperCase();
+            });
+
+            overlay.querySelector('#recovery-restore').addEventListener('click', async () => {
+                const code = input.value.trim();
+                if (!code) {
+                    errorEl.textContent = 'Please enter your recovery code';
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+                errorEl.textContent = 'Restoring…';
+                errorEl.classList.remove('hidden');
+                errorEl.style.color = 'var(--text-secondary)';
+                try {
+                    const data = await restoreFromCloud(code);
+                    state = ensureStateFields(data);
+                    setRecoveryCode(code);
+                    saveState();
+                    overlay.classList.remove('visible');
+                    setTimeout(() => overlay.remove(), 200);
+                    showToast('✅ Data restored from cloud!');
+                    switchView('today');
+                    resolve(true);
+                } catch (err) {
+                    errorEl.textContent = '❌ No data found for that code. Check and try again.';
+                    errorEl.style.color = 'var(--accent-danger)';
+                }
+            });
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    overlay.querySelector('#recovery-restore').click();
+                }
+            });
+
+            overlay.querySelector('#recovery-skip').addEventListener('click', () => {
+                overlay.classList.remove('visible');
+                setTimeout(() => overlay.remove(), 200);
+                resolve(false);
+            });
+        });
+    }
+
+    function showWelcomeOrRestoreModal() {
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'confirm-overlay';
+            overlay.innerHTML = `
+                <div class="confirm-dialog recovery-dialog">
+                    <h3 class="recovery-title">👋 Welcome to Daily Engine!</h3>
+                    <p class="recovery-subtitle">Do you have a recovery code from a previous setup? If so, you can restore your data right now.</p>
+                    <input type="text" class="recovery-code-input" id="welcome-recovery-input" placeholder="ENGINE-XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">
+                    <div id="welcome-recovery-error" class="recovery-error hidden"></div>
+                    <div class="confirm-buttons">
+                        <button class="confirm-btn confirm-cancel" id="welcome-fresh">Start Fresh</button>
+                        <button class="confirm-btn confirm-yes recovery-done-btn" id="welcome-restore">Restore</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            requestAnimationFrame(() => overlay.classList.add('visible'));
+
+            const input = overlay.querySelector('#welcome-recovery-input');
+            const errorEl = overlay.querySelector('#welcome-recovery-error');
+
+            input.addEventListener('input', () => {
+                input.value = input.value.toUpperCase();
+            });
+
+            overlay.querySelector('#welcome-restore').addEventListener('click', async () => {
+                const code = input.value.trim();
+                if (!code) {
+                    errorEl.textContent = 'Please enter your recovery code';
+                    errorEl.classList.remove('hidden');
+                    return;
+                }
+                errorEl.textContent = 'Restoring…';
+                errorEl.classList.remove('hidden');
+                errorEl.style.color = 'var(--text-secondary)';
+                try {
+                    const data = await restoreFromCloud(code);
+                    state = ensureStateFields(data);
+                    setRecoveryCode(code);
+                    saveState();
+                    overlay.classList.remove('visible');
+                    setTimeout(() => overlay.remove(), 200);
+                    showToast('✅ Data restored from cloud!');
+                    switchView('today');
+                    resolve(true);
+                } catch (err) {
+                    errorEl.textContent = '❌ No data found for that code. Check and try again.';
+                    errorEl.style.color = 'var(--accent-danger)';
+                }
+            });
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    overlay.querySelector('#welcome-restore').click();
+                }
+            });
+
+            overlay.querySelector('#welcome-fresh').addEventListener('click', () => {
+                overlay.classList.remove('visible');
+                setTimeout(() => overlay.remove(), 200);
+                resolve(false);
+            });
+        });
     }
 
     // ── URL-based backup/restore ─────────────────────────────
@@ -982,6 +1274,8 @@
         const importBtn = document.getElementById('btn-import');
         const clipboardBtn = document.getElementById('btn-copy-clipboard');
         const linkBtn = document.getElementById('btn-copy-link');
+        const recoveryBtn = document.getElementById('btn-show-recovery');
+        const cloudRestoreBtn = document.getElementById('btn-cloud-restore');
 
         // Clone to remove old listeners
         const newExportBtn = exportBtn.cloneNode(true);
@@ -999,6 +1293,19 @@
         const newLinkBtn = linkBtn.cloneNode(true);
         linkBtn.parentNode.replaceChild(newLinkBtn, linkBtn);
         newLinkBtn.addEventListener('click', copyBackupLink);
+
+        const newRecoveryBtn = recoveryBtn.cloneNode(true);
+        recoveryBtn.parentNode.replaceChild(newRecoveryBtn, recoveryBtn);
+        newRecoveryBtn.addEventListener('click', () => {
+            showRecoveryCodeModal(getRecoveryCode(), false);
+        });
+
+        const newCloudRestoreBtn = cloudRestoreBtn.cloneNode(true);
+        cloudRestoreBtn.parentNode.replaceChild(newCloudRestoreBtn, cloudRestoreBtn);
+        newCloudRestoreBtn.addEventListener('click', async () => {
+            const restored = await showRecoveryInputModal();
+            if (restored) switchView('today');
+        });
     }
 
     function renderEditTaskList() {
@@ -1404,8 +1711,32 @@
 
     // ── Boot ──────────────────────────────────────────────────
     function init() {
+        // Initialize Firebase cloud sync
+        initFirebase();
+
+        const hasLocalData = localStorage.getItem(STORAGE_KEY) !== null;
+        const hasRecoveryCode = localStorage.getItem(RECOVERY_CODE_KEY) !== null;
+
         rollForwardTodos();
         switchView('today');
+
+        // Handle cloud sync scenarios after render
+        setTimeout(async () => {
+            if (!hasLocalData && cloudSyncEnabled) {
+                // No local data — could be first time OR data was cleared
+                // Show a welcome/restore choice
+                const restored = await showWelcomeOrRestoreModal();
+                if (!restored) {
+                    // They chose "Start Fresh" — generate a new code and show it
+                    const code = getRecoveryCode();
+                    syncToCloud();
+                    showRecoveryCodeModal(code, true);
+                }
+            } else if (hasRecoveryCode && cloudSyncEnabled) {
+                // Returning user with existing data — just sync silently
+                syncToCloud();
+            }
+        }, 500);
 
         // Update every minute to handle time block transitions
         setInterval(() => {
