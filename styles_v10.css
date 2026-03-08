@@ -303,6 +303,19 @@ body {
     margin-right: 4px;
 }
 
+.task-override-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    margin-left: 6px;
+    opacity: 0.75;
+    white-space: nowrap;
+}
+
+.checklist-item.time-overridden {
+    border-left-width: 4px;
+    border-left-style: dashed;
+}
+
 /* Inline delete */
 .btn-inline-delete {
     background: none;

@@ -84,6 +84,7 @@
     let editSection = 'blocks'; // 'blocks' | 'tasks'
     let taskFilterBlock = null;
     let viewingDate = null; // null = today, or 'YYYY-MM-DD' for other days
+    let manualBlockSelection = false; // true if user tapped a block pill this session
 
     function loadState() {
         const restored = restoreFromUrl();
@@ -494,6 +495,35 @@
     function getBlockById(id) { return state.blocks.find(b => b.id === id) || null; }
     function getTaskById(id) { return state.tasks.find(t => t.id === id) || null; }
 
+    // Parse time string like "5:30 AM", "9:00 AM", "1:00 PM" to minutes since midnight
+    function parseTimeToMinutes(timeStr) {
+        if (!timeStr) return Infinity; // tasks with no time sort to end
+        const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+        if (!match) return Infinity;
+        let hours = parseInt(match[1]);
+        const mins = parseInt(match[2]);
+        const period = match[3].toUpperCase();
+        if (period === 'AM' && hours === 12) hours = 0;
+        if (period === 'PM' && hours !== 12) hours += 12;
+        return hours * 60 + mins;
+    }
+
+    // Find which block a task's start time falls into (for time-block override)
+    function getTimeMatchedBlock(task, dayName) {
+        if (!task.time) return null;
+        const taskMinutes = parseTimeToMinutes(task.time);
+        if (taskMinutes === Infinity) return null;
+        const dayBlocks = getBlocksForDay(dayName);
+        for (const block of dayBlocks) {
+            const group = block.groups.find(g => g.days.includes(dayName));
+            if (!group) continue;
+            const [sh, sm] = group.start.split(':').map(Number);
+            const [eh, em] = group.end.split(':').map(Number);
+            if (taskMinutes >= sh * 60 + sm && taskMinutes < eh * 60 + em) return block;
+        }
+        return null;
+    }
+
     // Blocks active on a given day
     function getBlocksForDay(dayName) {
         return state.blocks.filter(b => b.groups.some(g => g.days.includes(dayName)));
@@ -808,7 +838,7 @@
         if (name === 'stats') renderStats();
     }
 
-    btnToday.addEventListener('click', () => { viewingDate = null; selectedBlock = null; switchView('today'); });
+    btnToday.addEventListener('click', () => { viewingDate = null; selectedBlock = null; manualBlockSelection = false; switchView('today'); });
     btnEdit.addEventListener('click', () => switchView('edit'));
     btnStats.addEventListener('click', () => switchView('stats'));
 
@@ -822,6 +852,7 @@
         d.setDate(d.getDate() + offset);
         viewingDate = dateStr(d);
         selectedBlock = null; // reset block selection for new day
+        manualBlockSelection = false;
         renderToday();
     }
 
@@ -832,8 +863,13 @@
         const dayBlocks = getBlocksForDay(dayName);
         const currentBlk = isToday ? getCurrentBlock() : null;
 
+        // Auto-advance to current time block unless user manually selected one
         if (!selectedBlock || !dayBlocks.find(b => b.id === selectedBlock)) {
             selectedBlock = currentBlk ? currentBlk.id : (dayBlocks[0] ? dayBlocks[0].id : null);
+            manualBlockSelection = false;
+        } else if (isToday && currentBlk && !manualBlockSelection) {
+            // Auto-advance: if it's today and user hasn't manually picked, follow the clock
+            selectedBlock = currentBlk.id;
         }
 
         // Date header with navigation
@@ -858,6 +894,7 @@
         dayNav.querySelector('#day-nav-today').addEventListener('click', () => {
             viewingDate = null;
             selectedBlock = null;
+            manualBlockSelection = false;
             renderToday();
         });
 
@@ -891,7 +928,7 @@
             pill.dataset.blockId = block.id;
             pill.style.setProperty('--pill-color', getBlockColor(block));
             pill.textContent = block.name;
-            pill.addEventListener('click', () => { selectedBlock = block.id; renderToday(); });
+            pill.addEventListener('click', () => { selectedBlock = block.id; manualBlockSelection = true; renderToday(); });
             pillRow.appendChild(pill);
         }
 
@@ -899,8 +936,36 @@
         const container = document.getElementById('today-checklist');
         container.innerHTML = '';
         const block = getBlockById(selectedBlock);
-        const tasks = block ? getTasksForDayAndBlock(dayName, block.id) : [];
-        const visibleTasks = tasks.filter(t => isTaskDueOnDate(t, activeDate));
+
+        // Gather tasks: assigned to this block + time-overridden into this block
+        let visibleTasks = [];
+        if (block) {
+            // Tasks natively assigned to this block
+            const nativeTasks = getTasksForDayAndBlock(dayName, block.id)
+                .filter(t => isTaskDueOnDate(t, activeDate))
+                .map(t => ({ task: t, originBlock: null })); // originBlock null = native
+
+            // Tasks assigned to OTHER blocks but whose start time falls in THIS block
+            const otherTasks = state.tasks.filter(t => {
+                if (t.blockId === block.id) return false; // already included
+                if (!t.days.includes(dayName)) return false;
+                if (!isTaskDueOnDate(t, activeDate)) return false;
+                const matched = getTimeMatchedBlock(t, dayName);
+                return matched && matched.id === block.id;
+            }).map(t => ({ task: t, originBlock: getBlockById(t.blockId) }));
+
+            // Remove native tasks whose time actually falls in a different block
+            const nativeFiltered = nativeTasks.filter(({ task }) => {
+                const matched = getTimeMatchedBlock(task, dayName);
+                // Keep if no time set, or if time matches this block, or if time doesn't match any block
+                return !matched || matched.id === block.id;
+            });
+
+            visibleTasks = [...nativeFiltered, ...otherTasks];
+
+            // Sort all by start time
+            visibleTasks.sort((a, b) => parseTimeToMinutes(a.task.time) - parseTimeToMinutes(b.task.time));
+        }
 
         if (!visibleTasks.length) {
             container.innerHTML = `
@@ -909,11 +974,13 @@
                     <p>No tasks for this block${isToday ? ' today' : ''}.<br>Head to Edit to add some!</p>
                 </div>`;
         } else {
-            visibleTasks.forEach(task => {
+            visibleTasks.forEach(({ task, originBlock }) => {
                 const checked = getCompletion(activeDate, task.id);
                 const item = document.createElement('div');
-                item.className = 'checklist-item' + (checked ? ' checked' : '');
-                item.style.borderLeftColor = block ? getBlockColor(block) : '#3b82f6';
+                item.className = 'checklist-item' + (checked ? ' checked' : '') + (originBlock ? ' time-overridden' : '');
+                // Use original block color for overridden tasks, current block color for native
+                const displayColor = originBlock ? getBlockColor(originBlock) : (block ? getBlockColor(block) : '#3b82f6');
+                item.style.borderLeftColor = displayColor;
                 let metaHtml = '';
                 if (task.time || task.duration) {
                     const parts = [];
@@ -922,6 +989,7 @@
                     metaHtml = `<span class="task-meta">${escapeHtml(parts.join(' · '))}</span>`;
                 }
                 const recurHtml = task.recurrence ? `<span class="task-recur-badge">🔁</span>` : '';
+                const overrideBadge = originBlock ? `<span class="task-override-badge" style="color:${getBlockColor(originBlock)}">↗ ${escapeHtml(originBlock.name)}</span>` : '';
                 item.innerHTML = `
                     <div class="custom-checkbox">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -929,7 +997,7 @@
                         </svg>
                     </div>
                     <div class="task-content">
-                        <span class="task-text">${recurHtml}${escapeHtml(task.text)}</span>
+                        <span class="task-text">${recurHtml}${escapeHtml(task.text)}${overrideBadge}</span>
                         ${metaHtml}
                     </div>`;
                 item.addEventListener('click', () => { setTaskCompletion(activeDate, task.id, !checked); renderToday(); });
