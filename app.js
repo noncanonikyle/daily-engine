@@ -7,6 +7,7 @@
 
     // ── Constants ──────────────────────────────────────────────
     const STORAGE_KEY = 'dailyEngine';
+    const BACKUP_KEY = 'dailyEngine_backup';
     const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
@@ -125,34 +126,267 @@
     let editBlock = null;
 
     function loadState() {
+        // First check if there's a restore payload in the URL hash
+        const restored = restoreFromUrl();
+        if (restored) return restored;
+
+        // Try primary storage
         try {
             const raw = localStorage.getItem(STORAGE_KEY);
             if (raw) {
                 const parsed = JSON.parse(raw);
-                // Ensure all fields exist
-                if (!parsed.schedule) parsed.schedule = getDefaultSchedule();
-                if (!parsed.timeBlocks) parsed.timeBlocks = getDefaultTimeBlocks();
-                if (!parsed.completions) parsed.completions = {};
-                if (!parsed.history) parsed.history = {};
-                return parsed;
+                return ensureStateFields(parsed);
             }
         } catch (e) {
-            console.warn('Failed to load state, using defaults', e);
+            console.warn('Primary storage failed, trying backup...', e);
         }
+
+        // Try backup storage
+        try {
+            const backupRaw = localStorage.getItem(BACKUP_KEY);
+            if (backupRaw) {
+                const backupData = JSON.parse(backupRaw);
+                console.info('Recovered from backup, timestamp:', backupData._backupTime);
+                return ensureStateFields(backupData);
+            }
+        } catch (e) {
+            console.warn('Backup storage also failed, using defaults', e);
+        }
+
+        return freshState();
+    }
+
+    function ensureStateFields(parsed) {
+        if (!parsed.schedule) parsed.schedule = getDefaultSchedule();
+        if (!parsed.timeBlocks) parsed.timeBlocks = getDefaultTimeBlocks();
+        if (!parsed.completions) parsed.completions = {};
+        if (!parsed.history) parsed.history = {};
+        if (!parsed.archive) parsed.archive = {};
+        return parsed;
+    }
+
+    function freshState() {
         return {
             schedule: getDefaultSchedule(),
             timeBlocks: getDefaultTimeBlocks(),
-            completions: {},  // { "2026-03-07": { "morning": [true, false, ...], ... } }
-            history: {}       // { "2026-03-07": { completed: 5, total: 10 } }
+            completions: {},
+            history: {},
+            archive: {}
         };
     }
 
     function saveState() {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            // Also save a redundant backup with timestamp
+            const backupCopy = JSON.parse(JSON.stringify(state));
+            backupCopy._backupTime = new Date().toISOString();
+            localStorage.setItem(BACKUP_KEY, JSON.stringify(backupCopy));
         } catch (e) {
             console.warn('Failed to save state', e);
         }
+    }
+
+    // ── URL-based backup/restore ─────────────────────────────
+    function restoreFromUrl() {
+        try {
+            const hash = window.location.hash;
+            if (!hash || !hash.startsWith('#backup=')) return null;
+            const encoded = hash.substring('#backup='.length);
+            const json = decodeURIComponent(atob(encoded));
+            const parsed = JSON.parse(json);
+            if (parsed.schedule && parsed.timeBlocks) {
+                // Clear the hash so it doesn't re-import on refresh
+                history.replaceState(null, '', window.location.pathname);
+                return ensureStateFields(parsed);
+            }
+        } catch (e) {
+            console.warn('Failed to restore from URL', e);
+        }
+        return null;
+    }
+
+    function generateBackupUrl() {
+        // Strip completions/history to keep URL shorter — only schedule, timeBlocks, archive
+        const exportData = {
+            schedule: state.schedule,
+            timeBlocks: state.timeBlocks,
+            archive: state.archive
+        };
+        const json = JSON.stringify(exportData);
+        const encoded = btoa(encodeURIComponent(json));
+        return window.location.origin + window.location.pathname + '#backup=' + encoded;
+    }
+
+    function copyBackupToClipboard() {
+        const dataStr = JSON.stringify(state, null, 2);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(dataStr).then(() => {
+                showToast('✅ Backup copied to clipboard!');
+            }).catch(() => {
+                fallbackCopy(dataStr);
+            });
+        } else {
+            fallbackCopy(dataStr);
+        }
+    }
+
+    function fallbackCopy(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('✅ Backup copied to clipboard!');
+    }
+
+    function copyBackupLink() {
+        const url = generateBackupUrl();
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(() => {
+                showToast('🔗 Backup link copied! Save it somewhere safe.');
+            }).catch(() => {
+                // Fallback
+                fallbackCopy(url);
+                showToast('🔗 Backup link copied!');
+            });
+        } else {
+            fallbackCopy(url);
+            showToast('🔗 Backup link copied!');
+        }
+    }
+
+    function showToast(message) {
+        // Remove existing toast
+        const existing = document.querySelector('.toast');
+        if (existing) existing.remove();
+
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.add('visible'));
+        setTimeout(() => {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 300);
+        }, 2500);
+    }
+
+    // ── Archive helpers ──────────────────────────────────────
+    function getArchive(dayName, block) {
+        if (!state.archive[dayName]) state.archive[dayName] = {};
+        if (!state.archive[dayName][block]) state.archive[dayName][block] = [];
+        return state.archive[dayName][block];
+    }
+
+    function archiveTask(dayName, block, task) {
+        const archive = getArchive(dayName, block);
+        // Don't archive empty tasks or duplicates
+        if (task.text && task.text.trim()) {
+            const exists = archive.some(t => t.text === task.text);
+            if (!exists) {
+                archive.push({ text: task.text });
+            }
+        }
+        saveState();
+    }
+
+    function restoreFromArchive(dayName, block, index) {
+        const archive = getArchive(dayName, block);
+        if (index < 0 || index >= archive.length) return;
+        const task = archive.splice(index, 1)[0];
+        if (!state.schedule[dayName]) state.schedule[dayName] = {};
+        if (!state.schedule[dayName][block]) state.schedule[dayName][block] = [];
+        state.schedule[dayName][block].push(task);
+        saveState();
+    }
+
+    // ── Confirm dialog ───────────────────────────────────────
+    function showConfirm(message) {
+        return new Promise((resolve) => {
+            // Create modal overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'confirm-overlay';
+            overlay.innerHTML = `
+                <div class="confirm-dialog">
+                    <p class="confirm-message">${message}</p>
+                    <div class="confirm-buttons">
+                        <button class="confirm-btn confirm-cancel">Cancel</button>
+                        <button class="confirm-btn confirm-yes">Delete</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+            // Animate in
+            requestAnimationFrame(() => overlay.classList.add('visible'));
+
+            overlay.querySelector('.confirm-cancel').addEventListener('click', () => {
+                overlay.classList.remove('visible');
+                setTimeout(() => overlay.remove(), 200);
+                resolve(false);
+            });
+            overlay.querySelector('.confirm-yes').addEventListener('click', () => {
+                overlay.classList.remove('visible');
+                setTimeout(() => overlay.remove(), 200);
+                resolve(true);
+            });
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    overlay.classList.remove('visible');
+                    setTimeout(() => overlay.remove(), 200);
+                    resolve(false);
+                }
+            });
+        });
+    }
+
+    // ── Export / Import ──────────────────────────────────────
+    function exportData() {
+        const dataStr = JSON.stringify(state, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const dateStr = todayStr();
+        a.download = `daily-engine-backup-${dateStr}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function importData() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const imported = JSON.parse(ev.target.result);
+                    if (imported.schedule && imported.timeBlocks) {
+                        state = imported;
+                        if (!state.archive) state.archive = {};
+                        if (!state.completions) state.completions = {};
+                        if (!state.history) state.history = {};
+                        saveState();
+                        switchView(currentView); // refresh
+                        alert('✅ Backup restored successfully!');
+                    } else {
+                        alert('❌ Invalid backup file — missing schedule or timeBlocks.');
+                    }
+                } catch (err) {
+                    alert('❌ Could not read file. Make sure it\'s a valid Daily Engine backup.');
+                }
+            };
+            reader.readAsText(file);
+        });
+        input.click();
     }
 
     // ── Helpers ───────────────────────────────────────────────
@@ -298,7 +532,7 @@
             container.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-icon">📝</div>
-                    <p>No tasks for this block yet.<br>Tap the ✏️ icon to add some!</p>
+                    <p>No tasks for this block yet.<br>Tap + below to add some!</p>
                 </div>
             `;
         } else {
@@ -314,12 +548,116 @@
                         </svg>
                     </div>
                     <span class="task-text">${escapeHtml(task.text)}</span>
+                    <button class="btn-inline-delete" aria-label="Delete task">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
                 `;
-                item.addEventListener('click', () => {
+                // Check/uncheck on tap (but not if delete button was tapped)
+                item.addEventListener('click', (e) => {
+                    if (e.target.closest('.btn-inline-delete')) return;
                     setCompletion(dateStr, selectedBlock, i, !checked);
                     renderToday();
                 });
+                // Delete task (with confirmation + archive)
+                item.querySelector('.btn-inline-delete').addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const confirmed = await showConfirm(`Remove "${task.text}" from your routine?`);
+                    if (!confirmed) return;
+                    // Archive it first
+                    archiveTask(dayName, selectedBlock, task);
+                    tasks.splice(i, 1);
+                    // Also remove the completion entry for this index
+                    const c = getCompletions(dateStr, selectedBlock);
+                    c.splice(i, 1);
+                    updateHistory(dateStr);
+                    saveState();
+                    renderToday();
+                });
                 container.appendChild(item);
+            });
+        }
+
+        // Quick-add button (always visible in Today view)
+        const quickAdd = document.createElement('div');
+        quickAdd.className = 'quick-add-container';
+        quickAdd.innerHTML = `
+            <button class="btn-quick-add" id="btn-quick-add-toggle">+ Add Task</button>
+            <div class="quick-add-input-row hidden" id="quick-add-row">
+                <input type="text" id="quick-add-input" class="quick-add-input" placeholder="What needs to get done?" autocomplete="off">
+                <button class="btn-quick-add-confirm" id="btn-quick-add-confirm">Add</button>
+            </div>
+        `;
+        container.appendChild(quickAdd);
+
+        // Quick-add interactions
+        const toggleBtn = quickAdd.querySelector('#btn-quick-add-toggle');
+        const inputRow = quickAdd.querySelector('#quick-add-row');
+        const input = quickAdd.querySelector('#quick-add-input');
+        const confirmBtn = quickAdd.querySelector('#btn-quick-add-confirm');
+
+        toggleBtn.addEventListener('click', () => {
+            toggleBtn.classList.add('hidden');
+            inputRow.classList.remove('hidden');
+            input.focus();
+        });
+
+        function addQuickTask() {
+            const text = input.value.trim();
+            if (!text) return;
+            // Ensure schedule structure exists
+            if (!state.schedule[dayName]) state.schedule[dayName] = {};
+            if (!state.schedule[dayName][selectedBlock]) state.schedule[dayName][selectedBlock] = [];
+            state.schedule[dayName][selectedBlock].push({ text });
+            saveState();
+            renderToday();
+        }
+
+        confirmBtn.addEventListener('click', addQuickTask);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') addQuickTask();
+            if (e.key === 'Escape') {
+                toggleBtn.classList.remove('hidden');
+                inputRow.classList.add('hidden');
+            }
+        });
+
+        // Archived tasks section
+        const archive = getArchive(dayName, selectedBlock);
+        if (archive.length > 0) {
+            const archiveSection = document.createElement('div');
+            archiveSection.className = 'archive-section';
+            archiveSection.innerHTML = `
+                <button class="archive-toggle" id="archive-toggle">
+                    <span class="archive-toggle-icon">▶</span>
+                    Archived Tasks (${archive.length})
+                </button>
+                <div class="archive-list hidden" id="archive-list"></div>
+            `;
+            container.appendChild(archiveSection);
+
+            const archiveToggle = archiveSection.querySelector('#archive-toggle');
+            const archiveList = archiveSection.querySelector('#archive-list');
+            const archiveIcon = archiveSection.querySelector('.archive-toggle-icon');
+
+            archiveToggle.addEventListener('click', () => {
+                archiveList.classList.toggle('hidden');
+                archiveIcon.textContent = archiveList.classList.contains('hidden') ? '▶' : '▼';
+            });
+
+            archive.forEach((task, i) => {
+                const item = document.createElement('div');
+                item.className = 'archive-item';
+                item.innerHTML = `
+                    <span class="archive-task-text">${escapeHtml(task.text)}</span>
+                    <button class="btn-restore" aria-label="Restore task">↩ Restore</button>
+                `;
+                item.querySelector('.btn-restore').addEventListener('click', () => {
+                    restoreFromArchive(dayName, selectedBlock, i);
+                    renderToday();
+                });
+                archiveList.appendChild(item);
             });
         }
 
@@ -419,6 +757,29 @@
                 saveState();
             });
         });
+
+        // Backup buttons
+        const exportBtn = document.getElementById('btn-export');
+        const importBtn = document.getElementById('btn-import');
+        const clipboardBtn = document.getElementById('btn-copy-clipboard');
+        const linkBtn = document.getElementById('btn-copy-link');
+
+        // Clone to remove old listeners
+        const newExportBtn = exportBtn.cloneNode(true);
+        exportBtn.parentNode.replaceChild(newExportBtn, exportBtn);
+        newExportBtn.addEventListener('click', exportData);
+
+        const newImportBtn = importBtn.cloneNode(true);
+        importBtn.parentNode.replaceChild(newImportBtn, importBtn);
+        newImportBtn.addEventListener('click', importData);
+
+        const newClipboardBtn = clipboardBtn.cloneNode(true);
+        clipboardBtn.parentNode.replaceChild(newClipboardBtn, clipboardBtn);
+        newClipboardBtn.addEventListener('click', copyBackupToClipboard);
+
+        const newLinkBtn = linkBtn.cloneNode(true);
+        linkBtn.parentNode.replaceChild(newLinkBtn, linkBtn);
+        newLinkBtn.addEventListener('click', copyBackupLink);
     }
 
     function renderEditTaskList() {
@@ -452,9 +813,13 @@
                 saveState();
             });
 
-            // Delete
+            // Delete (with confirmation + archive)
             const deleteBtn = item.querySelector('.btn-delete-task');
-            deleteBtn.addEventListener('click', () => {
+            deleteBtn.addEventListener('click', async () => {
+                const taskText = tasks[i].text || '(empty task)';
+                const confirmed = await showConfirm(`Remove "${taskText}" from your routine?`);
+                if (!confirmed) return;
+                archiveTask(editDay, editBlock, tasks[i]);
                 tasks.splice(i, 1);
                 saveState();
                 renderEditTaskList();
@@ -505,6 +870,44 @@
                 if (inputs.length > 0) inputs[inputs.length - 1].focus();
             }, 50);
         });
+
+        // Archive section in edit view
+        const archive = getArchive(editDay, editBlock);
+        if (archive.length > 0) {
+            const archiveSection = document.createElement('div');
+            archiveSection.className = 'archive-section';
+            archiveSection.innerHTML = `
+                <button class="archive-toggle">
+                    <span class="archive-toggle-icon">▶</span>
+                    Archived Tasks (${archive.length})
+                </button>
+                <div class="archive-list hidden"></div>
+            `;
+            container.appendChild(archiveSection);
+
+            const archiveToggle = archiveSection.querySelector('.archive-toggle');
+            const archiveList = archiveSection.querySelector('.archive-list');
+            const archiveIcon = archiveSection.querySelector('.archive-toggle-icon');
+
+            archiveToggle.addEventListener('click', () => {
+                archiveList.classList.toggle('hidden');
+                archiveIcon.textContent = archiveList.classList.contains('hidden') ? '▶' : '▼';
+            });
+
+            archive.forEach((task, i) => {
+                const item = document.createElement('div');
+                item.className = 'archive-item';
+                item.innerHTML = `
+                    <span class="archive-task-text">${escapeHtml(task.text)}</span>
+                    <button class="btn-restore" aria-label="Restore task">↩ Restore</button>
+                `;
+                item.querySelector('.btn-restore').addEventListener('click', () => {
+                    restoreFromArchive(editDay, editBlock, i);
+                    renderEditTaskList();
+                });
+                archiveList.appendChild(item);
+            });
+        }
     }
 
     function escapeAttr(str) {
