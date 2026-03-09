@@ -64,9 +64,7 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: calc(var(--safe-top) + 12px) 20px 12px;
-    background: rgba(10, 10, 15, 0.85);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: var(--bg-primary);
     border-bottom: 1px solid var(--border);
 }
 

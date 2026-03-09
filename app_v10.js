@@ -85,6 +85,7 @@
     let taskFilterBlock = null;
     let viewingDate = null; // null = today, or 'YYYY-MM-DD' for other days
     let manualBlockSelection = false; // true if user tapped a block pill this session
+    let hasAutoScrolled = false; // only auto-scroll to current block once per session
 
     function loadState() {
         const restored = restoreFromUrl();
@@ -1151,12 +1152,13 @@
             if (el) observer.observe(el);
         });
 
-        // Auto-scroll to current block on initial load (today only)
-        if (isToday && currentBlk) {
+        // Auto-scroll to current block on initial load only (today, once per session)
+        if (isToday && currentBlk && !hasAutoScrolled) {
             const currentSection = document.getElementById('block-section-' + currentBlk.id);
             if (currentSection) {
                 setTimeout(() => currentSection.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
             }
+            hasAutoScrolled = true;
         }
 
         // ── To-Dos ──────────────────────────────────────────────
@@ -2159,49 +2161,43 @@
             } else if (hasRecoveryCode && cloudSyncEnabled) { syncToCloud(); }
         }, 500);
 
-        setInterval(() => { if (currentView === 'today') renderToday(); }, 60000);
-
+        // Re-render when app comes back to foreground (handles day changes, cloud sync)
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && cloudSyncEnabled) pullFromCloudIfNewer();
+            if (document.visibilityState === 'visible') {
+                if (cloudSyncEnabled) pullFromCloudIfNewer();
+                if (currentView === 'today') renderToday();
+            }
         });
     }
 
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('sw.js').then(reg => {
-            // Check for updates every 60 seconds
-            setInterval(() => reg.update(), 60 * 1000);
-
-            // Also check when the app comes back to foreground
+            // Check for updates only when the app comes back to foreground
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'visible') reg.update();
             });
 
-            // When a new service worker is waiting, activate it and reload
-            const onNewSW = () => {
+            // When a new service worker is waiting, notify user with a toast
+            const notifyUpdate = () => {
                 if (reg.waiting) {
+                    showToast('🔄 Update available — reopen app to apply');
                     reg.waiting.postMessage('skipWaiting');
                 }
             };
 
-            if (reg.waiting) onNewSW();
+            if (reg.waiting) notifyUpdate();
 
             reg.addEventListener('updatefound', () => {
                 const newSW = reg.installing;
                 if (newSW) {
                     newSW.addEventListener('statechange', () => {
                         if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-                            // New version ready — auto-reload
-                            onNewSW();
+                            notifyUpdate();
                         }
                     });
                 }
             });
         }).catch(err => console.warn('SW failed:', err));
-
-        // When the new SW takes over, reload the page to get fresh assets
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-            window.location.reload();
-        });
     }
 
     init();
