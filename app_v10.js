@@ -1012,19 +1012,20 @@
         }
 
         // Render each block section
-        dayBlocks.forEach(block => {
+        dayBlocks.forEach((block, blockIndex) => {
             const blockTasks = gatherTasksForBlock(block);
 
             // Section wrapper
             const section = document.createElement('div');
-            section.className = 'block-section';
+            section.className = 'block-section block-section-enter';
             section.id = 'block-section-' + block.id;
+            section.style.animationDelay = (blockIndex * 0.08) + 's';
 
             // Section header
-            const header = document.createElement('div');
-            header.className = 'block-section-header';
-            header.style.borderLeftColor = getBlockColor(block);
             const isCurrentBlock = isToday && currentBlk && block.id === currentBlk.id;
+            const header = document.createElement('div');
+            header.className = 'block-section-header' + (isCurrentBlock ? ' block-section-active' : '');
+            header.style.borderLeftColor = getBlockColor(block);
             header.innerHTML = `
                 <span class="block-section-name">${escapeHtml(block.name)}</span>
                 ${isCurrentBlock ? '<span class="block-section-now">NOW</span>' : ''}
@@ -1038,10 +1039,11 @@
                 empty.textContent = 'No tasks in this block';
                 section.appendChild(empty);
             } else {
-                blockTasks.forEach(({ task, originBlock }) => {
+                blockTasks.forEach(({ task, originBlock }, taskIndex) => {
                     const checked = getCompletion(activeDate, task.id);
                     const item = document.createElement('div');
-                    item.className = 'checklist-item' + (checked ? ' checked' : '') + (originBlock ? ' time-overridden' : '');
+                    item.className = 'checklist-item task-item-enter' + (checked ? ' checked' : '') + (originBlock ? ' time-overridden' : '');
+                    item.style.animationDelay = (blockIndex * 0.08 + taskIndex * 0.04) + 's';
                     const displayColor = originBlock ? getBlockColor(originBlock) : getBlockColor(block);
                     item.style.borderLeftColor = displayColor;
                     let metaHtml = '';
