@@ -189,7 +189,7 @@ body {
     gap: 8px;
     flex-wrap: wrap;
     position: sticky;
-    top: calc(var(--safe-top) + 47px); /* below app header: safe-area + padding + content + border */
+    top: var(--header-height, 60px); /* measured by JS, fallback 60px */
     z-index: 20;
     background: var(--bg-primary);
     padding: 8px 0 10px;
@@ -245,7 +245,7 @@ body {
 /* --- Block Sections (continuous list) --- */
 .block-section {
     margin-bottom: 8px;
-    scroll-margin-top: calc(var(--safe-top) + 100px); /* header + pills + breathing room */
+    scroll-margin-top: calc(var(--header-height, 60px) + 56px); /* header + pills + breathing room */
 }
 
 /* Entrance animation for sections */
@@ -287,13 +287,11 @@ body {
     padding: 10px 14px;
     border-left: 4px solid var(--border);
     border-radius: var(--radius-sm);
-    background: rgba(20, 20, 31, 0.92);
+    background: var(--bg-primary);
     margin-bottom: 6px;
     position: sticky;
-    top: calc(var(--safe-top) + 93px); /* header (~47px) + pill row (~46px) */
+    top: calc(var(--header-height, 60px) + 46px); /* header (measured) + pill row (~46px) */
     z-index: 10;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
     transition: box-shadow 0.3s ease, background 0.3s ease;
 }
 

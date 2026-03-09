@@ -1018,9 +1018,9 @@
 
             // Section wrapper
             const section = document.createElement('div');
-            section.className = 'block-section block-section-enter';
+            section.className = 'block-section' + (!hasAutoScrolled ? ' block-section-enter' : '');
             section.id = 'block-section-' + block.id;
-            section.style.animationDelay = (blockIndex * 0.08) + 's';
+            if (!hasAutoScrolled) section.style.animationDelay = (blockIndex * 0.08) + 's';
 
             // Section header
             const isCurrentBlock = isToday && currentBlk && block.id === currentBlk.id;
@@ -1043,8 +1043,8 @@
                 blockTasks.forEach(({ task, originBlock }, taskIndex) => {
                     const checked = getCompletion(activeDate, task.id);
                     const item = document.createElement('div');
-                    item.className = 'checklist-item task-item-enter' + (checked ? ' checked' : '') + (originBlock ? ' time-overridden' : '');
-                    item.style.animationDelay = (blockIndex * 0.08 + taskIndex * 0.04) + 's';
+                    item.className = 'checklist-item' + (!hasAutoScrolled ? ' task-item-enter' : '') + (checked ? ' checked' : '') + (originBlock ? ' time-overridden' : '');
+                    if (!hasAutoScrolled) item.style.animationDelay = (blockIndex * 0.08 + taskIndex * 0.04) + 's';
                     const displayColor = originBlock ? getBlockColor(originBlock) : getBlockColor(block);
                     item.style.borderLeftColor = displayColor;
                     let metaHtml = '';
@@ -1074,7 +1074,7 @@
                             ${measureValueHtml}
                         </div>`;
                     item.addEventListener('click', async () => {
-                        const newChecked = !checked;
+                        const newChecked = !getCompletion(activeDate, task.id);
                         if (newChecked && task.measurement) {
                             const value = await showMeasurementModal(task.text, task.measurement.unit);
                             if (value !== null) {
@@ -1083,7 +1083,23 @@
                             }
                         }
                         setTaskCompletion(activeDate, task.id, newChecked);
-                        renderToday();
+
+                        // In-place toggle — no full re-render
+                        item.classList.toggle('checked', newChecked);
+
+                        // Update section completion count
+                        const sectionEl = document.getElementById('block-section-' + block.id);
+                        if (sectionEl) {
+                            const countEl = sectionEl.querySelector('.block-section-count');
+                            if (countEl) {
+                                const items = sectionEl.querySelectorAll('.checklist-item');
+                                const done = sectionEl.querySelectorAll('.checklist-item.checked').length;
+                                countEl.textContent = done + '/' + items.length;
+                            }
+                        }
+
+                        // Update progress bar
+                        updateProgressBar(activeDate, dayName, dayBlocks);
                     });
                     section.appendChild(item);
                 });
@@ -1234,6 +1250,10 @@
         }
 
         // Progress bar
+        updateProgressBar(activeDate, dayName, dayBlocks);
+    }
+
+    function updateProgressBar(activeDate, dayName, dayBlocks) {
         let totalDone = 0, totalTasks = 0;
         for (const bl of dayBlocks) {
             for (const t of getTasksForDayAndBlock(dayName, bl.id)) {
@@ -1241,6 +1261,7 @@
                 totalTasks++; if (getCompletion(activeDate, t.id)) totalDone++;
             }
         }
+        const todos = getTodos(activeDate);
         totalTasks += todos.length;
         for (const t of todos) { if (t.done) totalDone++; }
         const pct = totalTasks > 0 ? Math.round((totalDone / totalTasks) * 100) : 0;
@@ -2148,6 +2169,17 @@
     // ── Boot ──────────────────────────────────────────────────
     // ══════════════════════════════════════════════════════════
     function init() {
+        // Measure actual header height and set CSS variable for sticky positioning
+        const header = document.getElementById('app-header');
+        if (header) {
+            const setHeaderHeight = () => {
+                const h = header.offsetHeight;
+                document.documentElement.style.setProperty('--header-height', h + 'px');
+            };
+            setHeaderHeight();
+            window.addEventListener('resize', setHeaderHeight);
+        }
+
         initFirebase();
         const hasLocalData = localStorage.getItem(STORAGE_KEY) !== null;
         const hasRecoveryCode = localStorage.getItem(RECOVERY_CODE_KEY) !== null;
