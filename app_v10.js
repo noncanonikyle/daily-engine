@@ -2167,7 +2167,41 @@
     }
 
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW failed:', err));
+        navigator.serviceWorker.register('sw.js').then(reg => {
+            // Check for updates every 60 seconds
+            setInterval(() => reg.update(), 60 * 1000);
+
+            // Also check when the app comes back to foreground
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') reg.update();
+            });
+
+            // When a new service worker is waiting, activate it and reload
+            const onNewSW = () => {
+                if (reg.waiting) {
+                    reg.waiting.postMessage('skipWaiting');
+                }
+            };
+
+            if (reg.waiting) onNewSW();
+
+            reg.addEventListener('updatefound', () => {
+                const newSW = reg.installing;
+                if (newSW) {
+                    newSW.addEventListener('statechange', () => {
+                        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+                            // New version ready — auto-reload
+                            onNewSW();
+                        }
+                    });
+                }
+            });
+        }).catch(err => console.warn('SW failed:', err));
+
+        // When the new SW takes over, reload the page to get fresh assets
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            window.location.reload();
+        });
     }
 
     init();
