@@ -4,7 +4,7 @@
    Bump CACHE_VERSION on every deploy!
    ============================================ */
 
-const CACHE_VERSION = 'daily-engine-v10.4';
+const CACHE_VERSION = 'daily-engine-v10.5';
 const ASSETS = [
     './',
     './index.html',

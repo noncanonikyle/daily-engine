@@ -191,7 +191,7 @@ body {
     gap: 8px;
     flex-wrap: wrap;
     position: sticky;
-    top: 59px; /* just below the app header */
+    top: calc(var(--safe-top) + 47px); /* below app header: safe-area + padding + content + border */
     z-index: 20;
     background: var(--bg-primary);
     padding: 8px 0 10px;
@@ -247,7 +247,7 @@ body {
 /* --- Block Sections (continuous list) --- */
 .block-section {
     margin-bottom: 8px;
-    scroll-margin-top: 120px; /* accounts for sticky header + pills */
+    scroll-margin-top: calc(var(--safe-top) + 100px); /* header + pills + breathing room */
 }
 
 /* Entrance animation for sections */
@@ -292,7 +292,7 @@ body {
     background: rgba(20, 20, 31, 0.92);
     margin-bottom: 6px;
     position: sticky;
-    top: 105px; /* below app header (59px) + pill row (~46px) */
+    top: calc(var(--safe-top) + 93px); /* header (~47px) + pill row (~46px) */
     z-index: 10;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
